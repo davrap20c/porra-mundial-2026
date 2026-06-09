@@ -226,6 +226,8 @@ async def poll_streak():
     if data.get('send_recovery_dms'):
         try:
             codes_data = await _api_get('/api/discord/recovery-codes')
+            app_url = codes_data.get('app_url', '')
+            url_line = f'\n🌐 **Web**: {app_url}' if app_url else ''
             sent = 0
             for u in codes_data.get('users', []):
                 try:
@@ -234,7 +236,7 @@ async def poll_streak():
                         f'👋 Hola **{u["name"]}**!\n\n'
                         f'Tu clave de recuperación para la **Porra Mundial 2026** es:\n'
                         f'```\n{u["recovery_code"]}\n```\n'
-                        f'Úsala en la web si pierdes acceso a tu cuenta.'
+                        f'Úsala en la web si pierdes acceso a tu cuenta.{url_line}'
                     )
                     sent += 1
                 except Exception as e:

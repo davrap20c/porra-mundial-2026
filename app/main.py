@@ -863,7 +863,8 @@ def admin_panel():
                            special_results=special_results,
                            all_teams=ALL_TEAMS,
                            discord_links=discord_links,
-                           last_api_sync=AppConfig.get('last_api_sync'))
+                           last_api_sync=AppConfig.get('last_api_sync'),
+                           app_public_url=AppConfig.get('app_public_url', ''))
 
 
 @app.route('/admin/phase', methods=['POST'])
@@ -1312,6 +1313,10 @@ def api_streak_mark_notified():
 @csrf.exempt
 @admin_required
 def admin_send_recovery_dms():
+    data = request.get_json() or {}
+    url = data.get('app_public_url', '').strip()
+    if url:
+        AppConfig.set('app_public_url', url)
     AppConfig.set('send_recovery_dms', '1')
     return jsonify({'ok': True})
 
@@ -1328,7 +1333,7 @@ def api_discord_recovery_codes():
         if user and user.recovery_code:
             result.append({'discord_id': link.discord_id, 'name': user.name, 'recovery_code': user.recovery_code})
     AppConfig.set('send_recovery_dms', '0')
-    return jsonify({'ok': True, 'users': result})
+    return jsonify({'ok': True, 'users': result, 'app_url': AppConfig.get('app_public_url', '')})
 
 
 @app.route('/admin/streak/set-result', methods=['POST'])
