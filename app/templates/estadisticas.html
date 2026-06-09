@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+{% block title %}Estadísticas de consenso – Porra Mundial 2026{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <div>
+    <h2 class="fw-bold mb-0"><i class="bi bi-bar-chart-fill text-warning"></i> Estadísticas de consenso</h2>
+    <p class="text-muted mb-0 small">Basado en {{ total_users }} participante{{ 's' if total_users != 1 else '' }}</p>
+  </div>
+</div>
+
+{# ── ESPECIALES ──────────────────────────────────────────────────────────── #}
+{% if special_stats %}
+<h4 class="fw-semibold mb-3"><i class="bi bi-stars text-warning"></i> Predicciones especiales</h4>
+<div class="row g-3 mb-5">
+  {% for s in special_stats %}
+  <div class="col-sm-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header py-2 d-flex align-items-center gap-2">
+        <i class="bi {{ s.category.icon }} text-warning"></i>
+        <span class="fw-semibold small">{{ s.category.label }}</span>
+      </div>
+      <div class="card-body py-2 px-3">
+        {% for pick in s.picks %}
+        <div class="mb-2">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="small">{{ flag(pick.value) if pick.value in (groups.values()|sum(start=[])) else '' }} {{ pick.value }}</span>
+            <span class="small text-muted">{{ pick.count }} voto{{ 's' if pick.count != 1 else '' }} · {{ pick.pct }}%</span>
+          </div>
+          <div class="progress" style="height:6px">
+            <div class="progress-bar {% if loop.first %}bg-warning{% else %}bg-secondary{% endif %}"
+                 style="width:{{ pick.pct }}%"></div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ── GRUPOS ──────────────────────────────────────────────────────────────── #}
+{% if group_stats %}
+<h4 class="fw-semibold mb-3"><i class="bi bi-grid-fill text-secondary"></i> Clasificación de grupos</h4>
+<p class="text-muted small mb-3">¿A qué equipo puso más gente en cada posición?</p>
+<div class="row g-3 mb-5">
+  {% for letter, pos_data in group_stats.items() %}
+  <div class="col-sm-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-header py-2 fw-bold">Grupo {{ letter }}</div>
+      <div class="card-body py-2 px-3">
+        {% for pos in range(1, 5) %}
+        {% set picks = pos_data.get(pos, []) %}
+        {% if picks %}
+        <div class="mb-3">
+          <div class="small text-muted fw-semibold mb-1">
+            {% if pos == 1 %}🥇 1º{% elif pos == 2 %}🥈 2º{% elif pos == 3 %}🥉 3º{% else %}4º{% endif %}
+          </div>
+          {% set top = picks[0] %}
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="small fw-semibold">{{ flag(top.team) }} {{ top.team }}</span>
+            <span class="small text-muted">{{ top.count }} · {{ top.pct }}%</span>
+          </div>
+          <div class="progress mb-1" style="height:5px">
+            <div class="progress-bar bg-warning" style="width:{{ top.pct }}%"></div>
+          </div>
+          {% for pick in picks[1:] %}
+          <div class="d-flex justify-content-between align-items-center">
+            <span class="small text-muted">{{ flag(pick.team) }} {{ pick.team }}</span>
+            <span class="small text-muted">{{ pick.count }} · {{ pick.pct }}%</span>
+          </div>
+          <div class="progress mb-1" style="height:3px">
+            <div class="progress-bar bg-secondary" style="width:{{ pick.pct }}%"></div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ── ELIMINATORIAS ───────────────────────────────────────────────────────── #}
+{% if knockout_stats %}
+<h4 class="fw-semibold mb-3"><i class="bi bi-diagram-3-fill text-secondary"></i> Eliminatorias</h4>
+<div class="mb-5">
+  {% for round_data in knockout_stats %}
+  <h6 class="text-uppercase text-muted fw-bold mb-2 mt-3" style="letter-spacing:.05em">{{ round_data.round.name }}</h6>
+  <div class="row g-2">
+    {% for row in round_data.matches %}
+    <div class="col-sm-6 col-lg-4">
+      <div class="card p-3">
+        <div class="small text-muted mb-2">
+          {{ flag(row.match.team1) }} {{ row.match.team1 }}
+          <span class="mx-1">vs</span>
+          {{ flag(row.match.team2) }} {{ row.match.team2 }}
+        </div>
+        {% for pick in row.picks %}
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <span class="small {% if loop.first %}fw-semibold{% else %}text-muted{% endif %}">
+            {{ flag(pick.team) }} {{ pick.team }}
+          </span>
+          <span class="small text-muted">{{ pick.count }} · {{ pick.pct }}%</span>
+        </div>
+        <div class="progress mb-1" style="height:{{ '5px' if loop.first else '3px' }}">
+          <div class="progress-bar {% if loop.first %}bg-warning{% else %}bg-secondary{% endif %}"
+               style="width:{{ pick.pct }}%"></div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if not special_stats and not group_stats and not knockout_stats %}
+<div class="text-center py-5">
+  <div class="fs-1 mb-3">📊</div>
+  <h4>Todavía no hay predicciones</h4>
+  <p class="text-muted">Las estadísticas aparecerán aquí cuando los participantes empiecen a predecir.</p>
+</div>
+{% endif %}
+
+{% endblock %}

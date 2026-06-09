@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% block title %}Clasificación – Porra Mundial 2026{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="fw-bold mb-0"><i class="bi bi-trophy-fill text-warning"></i> Clasificación General</h2>
+  <span class="text-muted small" id="last-update">Se actualiza en tiempo real</span>
+</div>
+
+{% if leaderboard %}
+<!-- Podio top 3 -->
+{% if leaderboard|length >= 3 %}
+<div class="row justify-content-center mb-4 g-3 align-items-stretch">
+  <!-- 1st -->
+  <div class="col-4 col-md-3">
+    <div class="card text-center border-warning h-100" style="box-shadow: 0 0 20px rgba(255,215,0,0.3);">
+      <div class="card-body py-3">
+        <div class="fs-3 mb-1">🥇</div>
+        <a href="{{ url_for('user_profile', user_id=leaderboard[0].id) }}" class="text-decoration-none text-warning fw-bold fs-5 d-block">{{ leaderboard[0].name }}</a>
+        <div class="badge bg-warning text-dark fs-6 mt-1">{{ leaderboard[0].total_points }} pts</div>
+        {% if leaderboard[0].has_wildcard and not leaderboard[0].wildcard_used %}
+        <div class="mt-1"><span class="badge bg-warning text-dark"><i class="bi bi-star-fill"></i> COMODÍN</span></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <!-- 2nd -->
+  <div class="col-4 col-md-3">
+    <div class="card text-center border-secondary h-100">
+      <div class="card-body py-3">
+        <div class="fs-3 mb-1">🥈</div>
+        <a href="{{ url_for('user_profile', user_id=leaderboard[1].id) }}" class="text-decoration-none text-white fw-bold d-block">{{ leaderboard[1].name }}</a>
+        <div class="badge bg-secondary fs-6 mt-1">{{ leaderboard[1].total_points }} pts</div>
+      </div>
+    </div>
+  </div>
+  <!-- 3rd -->
+  <div class="col-4 col-md-3">
+    <div class="card text-center h-100" style="border-color: #cd7f32 !important;">
+      <div class="card-body py-3">
+        <div class="fs-3 mb-1">🥉</div>
+        <a href="{{ url_for('user_profile', user_id=leaderboard[2].id) }}" class="text-decoration-none text-white fw-bold d-block">{{ leaderboard[2].name }}</a>
+        <div class="badge fs-6 mt-1" style="background:#cd7f32">{{ leaderboard[2].total_points }} pts</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Full table -->
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-dark table-hover align-middle mb-0" id="full-board">
+        <thead class="table-secondary">
+          <tr>
+            <th class="text-center" style="width:60px">#</th>
+            <th>Jugador</th>
+            <th class="text-center">Grupos<br><small class="text-muted fw-normal">100 pts/✓</small></th>
+            <th class="text-center">Eliminatorias<br><small class="text-muted fw-normal">200 pts/✓</small></th>
+            <th class="text-center">Especiales<br><small class="text-muted fw-normal">500 pts/✓</small></th>
+            <th class="text-center">Total</th>
+          </tr>
+        </thead>
+        <tbody id="leaderboard-body">
+          {% for entry in leaderboard %}
+          <tr {% if entry.rank <= 3 %}class="table-active"{% endif %}>
+            <td class="text-center fw-bold fs-5
+              {% if entry.rank == 1 %}rank-1{% elif entry.rank == 2 %}rank-2{% elif entry.rank == 3 %}rank-3{% endif %}">
+              {% if entry.rank == 1 %}🥇{% elif entry.rank == 2 %}🥈{% elif entry.rank == 3 %}🥉{% else %}{{ entry.rank }}{% endif %}
+            </td>
+            <td>
+              <a href="{{ url_for('user_profile', user_id=entry.id) }}" class="text-decoration-none text-white fw-semibold">{{ entry.name }}</a>
+              {% if entry.has_wildcard and not entry.wildcard_used %}
+                <span class="badge bg-warning text-dark ms-1 wildcard-badge"><i class="bi bi-star-fill"></i> COMODÍN</span>
+              {% elif entry.wildcard_used %}
+                <span class="badge bg-secondary ms-1"><i class="bi bi-star"></i> comodín usado</span>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              <span class="fw-semibold">{{ entry.group_points }}</span>
+              <small class="text-muted d-block">
+                {% if entry.group_points > 0 %}{{ entry.group_points // 100 }}/48 aciertos{% endif %}
+              </small>
+            </td>
+            <td class="text-center">
+              <span class="fw-semibold">{{ entry.knockout_points }}</span>
+            </td>
+            <td class="text-center">
+              <span class="fw-semibold">{{ entry.special_points }}</span>
+            </td>
+            <td class="text-center">
+              <span class="badge bg-primary fs-5 py-2 px-3">{{ entry.total_points }}</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+{% else %}
+<div class="text-center py-5">
+  <div class="fs-1 mb-3">👥</div>
+  <h4>Todavía no hay participantes</h4>
+  <p class="text-muted">¡Comparte el enlace con tus amigos para que se unan!</p>
+  <a href="{{ url_for('join') }}" class="btn btn-danger">Unirse a la porra</a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+window.onScoresUpdated = function(data) {
+  if (!data.leaderboard) return;
+  const tbody = document.getElementById('leaderboard-body');
+  if (!tbody) return;
+
+  document.getElementById('last-update').textContent = '⚡ Actualizado ahora';
+
+  const medals = ['🥇','🥈','🥉'];
+  tbody.innerHTML = data.leaderboard.map((e, i) => {
+    const wcBadge = e.has_wildcard && !e.wildcard_used
+      ? '<span class="badge bg-warning text-dark ms-1"><i class="bi bi-star-fill"></i> COMODÍN</span>'
+      : (e.wildcard_used ? '<span class="badge bg-secondary ms-1">comodín usado</span>' : '');
+    const aciertos = e.group_points > 0 ? `<small class="text-muted d-block">${e.group_points/100|0}/48 aciertos</small>` : '';
+    return `<tr ${i<3 ? 'class="table-active"' : ''}>
+      <td class="text-center fw-bold fs-5">${medals[i] || e.rank}</td>
+      <td><a href="/perfil/${e.id}" class="text-decoration-none text-white fw-semibold">${e.name}</a>${wcBadge}</td>
+      <td class="text-center"><span class="fw-semibold">${e.group_points}</span>${aciertos}</td>
+      <td class="text-center">${e.knockout_points}</td>
+      <td class="text-center">${e.special_points || 0}</td>
+      <td class="text-center"><span class="badge bg-primary fs-5 py-2 px-3">${e.total_points}</span></td>
+    </tr>`;
+  }).join('');
+};
+</script>
+{% endblock %}

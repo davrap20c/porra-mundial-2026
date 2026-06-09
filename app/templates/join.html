@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% block title %}Unirse – Porra Mundial 2026{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-4">
+  <div class="col-md-5">
+    <div class="card">
+      <div class="card-body p-4 text-center">
+        <div class="display-4 mb-3">⚽</div>
+        <h2 class="fw-bold mb-1">¡Únete a la porra!</h2>
+        <p class="text-muted mb-4">Elige tu nombre para competir con tus amigos</p>
+        <form method="POST" action="{{ url_for('join') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="mb-3 text-start">
+            <label class="form-label fw-semibold">Tu nombre</label>
+            <input type="text" name="name" class="form-control form-control-lg"
+                   placeholder="Ej: Rafa, La Pulga, etc."
+                   maxlength="30" autofocus required>
+            <div class="form-text">Máximo 30 caracteres. Este nombre aparecerá en la clasificación.</div>
+          </div>
+          <button type="submit" class="btn btn-danger btn-lg w-100 fw-bold">
+            <i class="bi bi-trophy-fill"></i> Entrar al Mundial
+          </button>
+        </form>
+        <div class="text-center mt-3">
+          <a href="{{ url_for('recover') }}" class="text-muted small">
+            <i class="bi bi-key"></i> ¿Ya tienes cuenta pero perdiste la sesión? Recupérala aquí
+          </a>
+        </div>
+        <hr class="my-4">
+        <div class="row text-center">
+          <div class="col-4">
+            <div class="fs-3">🏆</div>
+            <small class="text-muted">Predice grupos</small>
+          </div>
+          <div class="col-4">
+            <div class="fs-3">⚡</div>
+            <small class="text-muted">Ranking en directo</small>
+          </div>
+          <div class="col-4">
+            <div class="fs-3">⭐</div>
+            <small class="text-muted">Comodín especial</small>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card mt-3">
+      <div class="card-body">
+        <h6 class="text-warning"><i class="bi bi-star-fill"></i> Sistema de puntos</h6>
+        <ul class="list-unstyled small text-muted mb-0">
+          <li class="mb-1">✅ <strong>+100 pts</strong> por cada posición exacta en grupos</li>
+          <li class="mb-1">✅ <strong>+200 pts</strong> por cada acierto en eliminatorias</li>
+          <li class="mb-1">✅ <strong>+300 pts</strong> extra si aciertas el campeón</li>
+          <li>⭐ El líder de grupos gana el <strong>COMODÍN</strong> (cambia 1 predicción bloqueada)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

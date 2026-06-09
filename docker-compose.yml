@@ -1,0 +1,61 @@
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: ./app
+    ports:
+      - "5000:5000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      SECRET_KEY: ${SECRET_KEY}
+      FOOTBALL_API_KEY: ${FOOTBALL_API_KEY}
+      BOT_SECRET: ${BOT_SECRET}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./app:/app
+      - ./tests:/tests
+    restart: unless-stopped
+
+  discord_bot:
+    build: ./discord_bot
+    environment:
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+      DISCORD_CHANNEL_ID: ${DISCORD_CHANNEL_ID}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
+      BOT_SECRET: ${BOT_SECRET}
+      APP_URL: http://web:5000
+    depends_on:
+      - web
+    restart: unless-stopped
+
+  backup:
+    image: postgres:15-alpine
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGUSER: ${POSTGRES_USER}
+      PGDATABASE: ${POSTGRES_DB}
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    entrypoint: sh -c "while true; do pg_dump -h db | gzip > /backups/backup_$$(date +%Y%m%d_%H%M%S).sql.gz && ls -t /backups/backup_*.sql.gz | tail -n +49 | xargs rm -f; sleep 3600; done"
+
+volumes:
+  postgres_data:

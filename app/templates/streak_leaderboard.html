@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+{% block title %}Clasificación Racha del Día – Porra Mundial 2026{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-4">
+  <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  <h2 class="fw-bold mb-0">🔥 Clasificación — Racha del Día</h2>
+</div>
+
+{% if match %}
+<div class="card border-warning border-opacity-50 mb-4">
+  <div class="card-body">
+    <div class="row align-items-center g-4">
+
+      <!-- Pie chart -->
+      <div class="col-md-4 text-center">
+        <div class="fw-semibold mb-3 text-muted small text-uppercase">Votos — {{ match.home }} vs {{ match.away }}</div>
+        {% if total_votes > 0 %}
+        {% set home_deg = (votes_pct.home * 3.6) | round(1) %}
+        {% set draw_deg = (votes_pct.draw * 3.6) | round(1) %}
+        <div style="
+          width:160px; height:160px; border-radius:50%; margin:0 auto;
+          background: conic-gradient(
+            #0d6efd 0deg {{ home_deg }}deg,
+            #6c757d {{ home_deg }}deg {{ home_deg + draw_deg }}deg,
+            #dc3545 {{ home_deg + draw_deg }}deg 360deg
+          );
+          box-shadow: 0 0 20px rgba(255,193,7,.2);
+        "></div>
+        <div class="mt-3 d-flex justify-content-center gap-3 small">
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#0d6efd;margin-right:4px"></span>{{ match.home }} {{ votes_pct.home }}%</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#6c757d;margin-right:4px"></span>Empate {{ votes_pct.draw }}%</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#dc3545;margin-right:4px"></span>{{ match.away }} {{ votes_pct.away }}%</span>
+        </div>
+        <div class="text-muted small mt-1">{{ total_votes }} voto{{ 's' if total_votes != 1 }}</div>
+        {% else %}
+        <div class="text-muted py-4 small">Sin votos todavía</div>
+        {% endif %}
+      </div>
+
+      <!-- Vote bars -->
+      <div class="col-md-8">
+        {% for opt, label, color in [
+          ('home', match.home, '#0d6efd'),
+          ('draw', 'Empate',   '#6c757d'),
+          ('away', match.away, '#dc3545')
+        ] %}
+        <div class="mb-3">
+          <div class="d-flex justify-content-between small mb-1">
+            <span class="fw-semibold">{{ label }}</span>
+            <span class="text-muted">{{ votes[opt] }} votos · {{ votes_pct[opt] }}%</span>
+          </div>
+          <div class="progress" style="height:10px;border-radius:6px;background:#2a2a2a">
+            <div class="progress-bar" style="width:{{ votes_pct[opt] }}%;background:{{ color }};border-radius:6px;transition:width .6s ease"></div>
+          </div>
+        </div>
+        {% endfor %}
+        {% if match.result %}
+        {% set result_label = {'home': match.home, 'draw': 'Empate', 'away': match.away} %}
+        <div class="alert alert-success py-2 px-3 small mb-0 mt-3">
+          ✅ Resultado: <strong>{{ result_label[match.result] }}</strong>
+        </div>
+        {% endif %}
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Full leaderboard -->
+<div class="card">
+  <div class="card-header fw-bold">🏆 Clasificación completa</div>
+  <div class="card-body p-0">
+    {% if rankings %}
+    <table class="table table-dark table-hover mb-0">
+      <thead>
+        <tr>
+          <th class="text-center" style="width:50px">#</th>
+          <th>Jugador</th>
+          <th class="text-center">Puntos</th>
+          <th class="text-center">Racha actual</th>
+          <th class="text-center">Racha máx.</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rankings %}
+        <tr {% if user and r.user_id == user.id %}class="table-warning"{% endif %}>
+          <td class="text-center fw-bold">
+            {% if loop.index == 1 %}🥇
+            {% elif loop.index == 2 %}🥈
+            {% elif loop.index == 3 %}🥉
+            {% else %}{{ loop.index }}{% endif %}
+          </td>
+          <td>
+            <a href="{{ url_for('mis_predicciones', user_id=r.user_id) }}" class="text-decoration-none text-white fw-semibold">
+              {{ r.name }}
+            </a>
+            {% if user and r.user_id == user.id %}
+            <span class="badge bg-warning text-dark ms-1" style="font-size:.65rem">Tú</span>
+            {% endif %}
+          </td>
+          <td class="text-center">
+            <span class="badge bg-primary fs-6">{{ r.points }} pts</span>
+          </td>
+          <td class="text-center">
+            {% if r.current > 0 %}
+            <span class="badge bg-warning text-dark">🔥 {{ r.current }}</span>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="text-center text-muted">{{ r.max }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <div class="fs-1 mb-2">🔥</div>
+      <p>Aún no hay rachas registradas.</p>
+      <p class="small">Empieza a predecir partidos desde la página principal.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

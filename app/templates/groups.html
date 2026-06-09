@@ -1,0 +1,186 @@
+{% extends 'base.html' %}
+{% block title %}Predicción de Grupos – Porra Mundial 2026{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1"><i class="bi bi-table"></i> Fase de Grupos</h2>
+    <p class="text-muted mb-0">Arrastra los equipos para predecir el orden final de cada grupo</p>
+  </div>
+  <div class="text-end">
+    {% if phase.groups_open %}
+      <span class="badge bg-success fs-6 py-2 px-3"><i class="bi bi-unlock"></i> Abierto</span>
+      <div class="mt-1 small text-muted">Cierra el {{ deadline.deadline_str }}</div>
+    {% else %}
+      <span class="badge bg-secondary fs-6 py-2 px-3"><i class="bi bi-lock"></i> Cerrado</span>
+    {% endif %}
+  </div>
+</div>
+
+{% if phase.groups_open and deadline.seconds_left > 0 %}
+<div class="alert alert-warning d-flex align-items-center gap-3 mb-4">
+  <i class="bi bi-alarm fs-3"></i>
+  <div>
+    <strong>¡Las predicciones cierran automáticamente el jueves 11 de junio a las 20:00!</strong><br>
+    <span class="text-muted">Tiempo restante: </span>
+    <strong id="countdown" class="text-warning fs-5">--:--:--</strong>
+  </div>
+</div>
+{% endif %}
+
+{% if not phase.groups_open %}
+<div class="alert alert-warning">
+  <i class="bi bi-lock-fill"></i> Las predicciones de grupos están <strong>cerradas</strong>.
+  {% if existing %}Aquí están tus predicciones guardadas.{% else %}No guardaste predicciones.{% endif %}
+</div>
+{% endif %}
+
+<div class="alert alert-info d-flex align-items-start gap-2 mb-4">
+  <i class="bi bi-info-circle-fill fs-5 flex-shrink-0 mt-1"></i>
+  <div>
+    <strong>Puntuación:</strong> Ganas <strong>100 puntos</strong> por cada equipo cuya posición exacta en el grupo aciertes (1º, 2º, 3º o 4º).
+    Máximo <strong>{{ groups|length * 4 * 100 }} pts</strong> en la fase de grupos.
+  </div>
+</div>
+
+<form id="groups-form">
+  <div class="row g-3" id="groups-grid">
+    {% for group_name, teams in groups.items() %}
+    <div class="col-sm-6 col-lg-4 col-xl-3">
+      <div class="card h-100">
+        <div class="card-header d-flex justify-content-between align-items-center py-2">
+          <span class="fw-bold fs-5">Grupo {{ group_name }}</span>
+          <small class="text-muted">↕ arrastra</small>
+        </div>
+        <div class="card-body p-2">
+          <ul class="list-unstyled mb-0 sortable-list" data-group="{{ group_name }}" id="group-{{ group_name }}">
+            {% set saved = existing.get(group_name, {}) %}
+            {% if saved %}
+              {% for pos in [1,2,3,4] %}
+                {% if saved[pos] is defined %}
+                <li class="team-pill mb-2" data-team="{{ saved[pos] }}">
+                  <span class="badge bg-secondary position-badge">{{ pos }}</span>
+                  <span class="me-1">{{ flag(saved[pos]) }}</span>
+                  <span class="flex-grow-1">{{ saved[pos] }}</span>
+                  <i class="bi bi-grip-vertical text-muted"></i>
+                </li>
+                {% endif %}
+              {% endfor %}
+            {% else %}
+              {% for team in teams %}
+              <li class="team-pill mb-2" data-team="{{ team }}">
+                <span class="badge bg-secondary position-badge">{{ loop.index }}</span>
+                <span class="me-1">{{ flag(team) }}</span>
+                <span class="flex-grow-1">{{ team }}</span>
+                <i class="bi bi-grip-vertical text-muted"></i>
+              </li>
+              {% endfor %}
+            {% endif %}
+          </ul>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if phase.groups_open %}
+  <div class="mt-4 d-flex gap-3 align-items-center">
+    <button type="submit" class="btn btn-danger btn-lg fw-bold px-5" id="save-btn">
+      <i class="bi bi-floppy"></i> Guardar todas las predicciones
+    </button>
+    <span id="save-status" class="text-muted"></span>
+  </div>
+  {% endif %}
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const isOpen = {{ 'true' if phase.groups_open else 'false' }};
+
+document.querySelectorAll('.sortable-list').forEach(el => {
+  Sortable.create(el, {
+    animation: 150,
+    ghostClass: 'sortable-ghost',
+    chosenClass: 'sortable-chosen',
+    disabled: !isOpen,
+    onEnd: updatePositionBadges,
+  });
+});
+
+function updatePositionBadges() {
+  document.querySelectorAll('.sortable-list').forEach(ul => {
+    ul.querySelectorAll('li').forEach((li, i) => {
+      li.querySelector('.position-badge').textContent = i + 1;
+    });
+  });
+}
+
+document.getElementById('groups-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  if (!isOpen) return;
+
+  const btn = document.getElementById('save-btn');
+  const status = document.getElementById('save-status');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...';
+
+  const data = {};
+  document.querySelectorAll('.sortable-list').forEach(ul => {
+    const group = ul.dataset.group;
+    data[group] = [...ul.querySelectorAll('li')].map(li => li.dataset.team);
+  });
+
+  try {
+    const res = await fetch('{{ url_for("predict_groups") }}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data),
+    });
+    const json = await res.json();
+    if (json.ok) {
+      status.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> ' + json.msg + '</span>';
+    } else {
+      status.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> ' + json.msg + '</span>';
+    }
+  } catch (err) {
+    status.innerHTML = '<span class="text-danger">Error de conexión.</span>';
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="bi bi-floppy"></i> Guardar todas las predicciones';
+  setTimeout(() => status.innerHTML = '', 4000);
+});
+
+// Cuenta atrás
+const secondsLeft = {{ deadline.seconds_left }};
+if (secondsLeft > 0) {
+  let remaining = secondsLeft;
+  const el = document.getElementById('countdown');
+  const tick = () => {
+    if (!el) return;
+    if (remaining <= 0) {
+      el.textContent = '¡Cerrado!';
+      showToast('⏰ ¡Las predicciones de grupos han cerrado!');
+      document.querySelectorAll('.team-pill').forEach(p => p.style.cursor = 'default');
+      document.getElementById('save-btn')?.remove();
+      return;
+    }
+    const d = Math.floor(remaining / 86400);
+    const h = Math.floor((remaining % 86400) / 3600);
+    const m = Math.floor((remaining % 3600) / 60);
+    const s = remaining % 60;
+    el.textContent = d > 0
+      ? `${d}d ${String(h).padStart(2,'0')}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`
+      : `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    remaining--;
+  };
+  tick();
+  setInterval(tick, 1000);
+}
+</script>
+{% endblock %}

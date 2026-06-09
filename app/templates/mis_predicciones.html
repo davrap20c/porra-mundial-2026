@@ -1,0 +1,434 @@
+{% extends 'base.html' %}
+{% block title %}{{ profile_user.name }} – Porra Mundial 2026{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+.bracket-scroll { overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch; padding-bottom: 12px; }
+.bracket-tree   { display: flex; align-items: stretch; position: relative; gap: 0; padding: 4px 0 8px; min-height: 360px; }
+.bracket-svg    { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 0; }
+.b-round        { display: flex; flex-direction: column; flex-shrink: 0; width: 172px; position: relative; z-index: 1; }
+.b-round + .b-round { margin-left: 28px; }
+.b-round-label  { font-size: .58rem; text-transform: uppercase; letter-spacing: .09em; color: #666; text-align: center; padding-bottom: 6px; height: 24px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.b-round-body   { display: flex; flex-direction: column; flex: 1; }
+.b-group        { display: flex; flex-direction: column; justify-content: space-around; flex: 1; }
+.b-single       { justify-content: center; }
+.b-slot         { padding: 4px 0; }
+.b-card         { background: #16162a; border: 1px solid rgba(255,255,255,0.09); border-radius: 7px; overflow: hidden; width: 100%; }
+.b-card.has-pick   { border-color: rgba(255,215,0,.3); }
+.b-card.has-winner { border-color: rgba(76,175,80,.3); }
+.b-team         { display: flex; align-items: center; gap: 6px; padding: 6px 9px; font-size: .8rem; font-weight: 500; }
+.b-team + .b-team { border-top: 1px solid rgba(255,255,255,.06); }
+.b-flag         { flex-shrink: 0; }
+.b-name         { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .78rem; }
+.b-icon         { flex-shrink: 0; font-size: .7rem; }
+.b-team.b-picked { background: rgba(255,215,0,.1); color: #ffd700; }
+.b-team.b-won    { background: rgba(76,175,80,.12); color: #5cb85c; }
+.b-team.b-lost   { opacity: .35; }
+.b-team.b-tbd    { color: #444; font-style: italic; font-size: .72rem; }
+.b-result-bar   { padding: 2px 9px 4px; border-top: 1px solid rgba(255,255,255,.05); font-size: .65rem; min-height: 18px; }
+.tp-section     { margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.07); }
+.tp-label       { font-size: .6rem; text-transform: uppercase; letter-spacing: .09em; color: #666; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4 d-flex justify-content-between align-items-start flex-wrap gap-2">
+  <div>
+    {% if is_own %}
+    <h2 class="fw-bold mb-0"><i class="bi bi-person-check-fill text-warning"></i> Mis Predicciones</h2>
+    {% else %}
+    <h2 class="fw-bold mb-0"><i class="bi bi-person-fill text-warning"></i> {{ profile_user.name }}</h2>
+    <p class="text-muted mb-0 small">Predicciones de {{ profile_user.name }}</p>
+    {% endif %}
+    <p class="text-muted mt-1 mb-0">
+      <span class="me-3"><span class="badge bg-success">Verde</span> posición exacta (+100 pts)</span>
+      <span><span class="badge bg-danger">Rojo</span> posición incorrecta</span>
+    </p>
+  </div>
+  <div class="d-flex gap-2 align-self-center">
+    {% if is_own and profile_user.recovery_code %}
+    <span class="btn btn-sm btn-outline-secondary disabled" title="Guarda este código para recuperar tu cuenta si pierdes la sesión">
+      <i class="bi bi-key-fill text-warning"></i> <code class="text-warning">{{ profile_user.recovery_code }}</code>
+    </span>
+    {% endif %}
+    <a href="{{ url_for('leaderboard') }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-trophy"></i> Clasificación
+    </a>
+  </div>
+</div>
+
+{# ── HISTORIAL ────────────────────────────────────────────────────────────── #}
+<div class="card mb-4" id="historial-card" style="display:none!important">
+  <div class="card-header fw-semibold py-2">
+    <i class="bi bi-graph-up text-warning"></i> Evolución en el ranking
+  </div>
+  <div class="card-body" style="height:200px">
+    <canvas id="historialChart"></canvas>
+  </div>
+</div>
+</div>
+
+{# ── GRUPOS ──────────────────────────────────────────────────────────────── #}
+{% set group_letters = groups.keys() | list %}
+{% if group_rows %}
+<h4 class="fw-semibold mb-3"><i class="bi bi-grid-fill text-secondary"></i> Fase de Grupos</h4>
+
+{% set ns = namespace(has_results=false) %}
+{% for letter in group_letters %}
+  {% if letter in group_rows %}
+    {% for row in group_rows[letter] %}
+      {% if row.actual_pos is not none %}{% set ns.has_results = true %}{% endif %}
+    {% endfor %}
+  {% endif %}
+{% endfor %}
+
+{% if not ns.has_results %}
+<div class="alert alert-secondary py-2 mb-3 small">
+  <i class="bi bi-clock me-1"></i> Los resultados reales aparecerán aquí cuando empiece el torneo.
+</div>
+{% endif %}
+
+<div class="row g-3 mb-5">
+  {% for letter in group_letters %}
+  {% if letter in group_rows %}
+  <div class="col-sm-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header py-2">
+        <span class="fw-bold">Grupo {{ letter }}</span>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-dark mb-0 small">
+          <thead class="table-secondary">
+            <tr>
+              <th class="text-center" style="width:30px">#</th>
+              <th>Equipo</th>
+              <th class="text-center" style="width:50px">Real</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in group_rows[letter] %}
+            {% if row.correct == true %}
+              {% set row_class = 'table-success' %}
+              {% set icon = '<i class="bi bi-check-circle-fill text-success"></i>' %}
+            {% elif row.correct == false %}
+              {% set row_class = 'table-danger' %}
+              {% set icon = '<i class="bi bi-x-circle-fill text-danger"></i>' %}
+            {% else %}
+              {% set row_class = '' %}
+              {% set icon = '<i class="bi bi-dash text-muted"></i>' %}
+            {% endif %}
+            <tr class="{{ row_class }}">
+              <td class="text-center fw-bold text-muted">{{ row.pos }}</td>
+              <td>{{ flag(row.team) }} {{ row.team }}</td>
+              <td class="text-center">
+                {{ icon | safe }}
+                {% if row.actual_pos is not none and not row.correct %}
+                  <span class="text-muted ms-1">({{ row.actual_pos }})</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+</div>
+
+{% else %}
+<div class="alert alert-secondary mb-5">
+  <i class="bi bi-info-circle me-1"></i>
+  {% if is_own %}
+    Todavía no has enviado tus predicciones de grupos.
+    {% if phase.groups_open %}
+      <a href="{{ url_for('predict_groups') }}" class="alert-link">Hazlas ahora →</a>
+    {% endif %}
+  {% else %}
+    {{ profile_user.name }} todavía no ha enviado predicciones de grupos.
+  {% endif %}
+</div>
+{% endif %}
+
+{# ── ELIMINATORIAS ───────────────────────────────────────────────────────── #}
+<h4 class="fw-semibold mb-3"><i class="bi bi-diagram-3-fill text-secondary"></i> Eliminatorias</h4>
+
+{% if not ko_any_pick %}
+{# ── Sin predicciones: placeholder estilo grupos ─────────────────────────── #}
+<div class="alert alert-secondary mb-3">
+  <i class="bi bi-info-circle me-1"></i>
+  {% if is_own %}
+    Todavía no has enviado predicciones de eliminatorias.
+    {% if phase.get('bracket_open') or phase.get('r32_open') %}
+      <a href="{{ url_for('predict_bracket') }}" class="alert-link">Hacerlas ahora →</a>
+    {% endif %}
+  {% else %}
+    {{ profile_user.name }} todavía no tiene predicciones de eliminatorias.
+  {% endif %}
+</div>
+
+{# Placeholder bracket — grayed out, shows structure #}
+{% set tree_rounds_ph = [
+  {'id': 'r32',   'label': 'Ronda de 32',  'n_groups': 8,  'count': 16},
+  {'id': 'r16',   'label': 'Octavos',       'n_groups': 4,  'count': 8},
+  {'id': 'qf',    'label': 'Cuartos',       'n_groups': 2,  'count': 4},
+  {'id': 'sf',    'label': 'Semifinales',   'n_groups': 1,  'count': 2},
+  {'id': 'final', 'label': 'Final',         'n_groups': 0,  'count': 1},
+] %}
+<div class="bracket-scroll mb-4" style="opacity:.45;pointer-events:none;user-select:none">
+  <div class="bracket-tree" id="bracketTreePh">
+    {% for tr in tree_rounds_ph %}
+    <div class="b-round" data-round="{{ tr.id }}">
+      <div class="b-round-label">{{ tr.label }}</div>
+      <div class="b-round-body">
+        {% if tr.id == 'final' %}
+          <div class="b-group b-single">
+            <div class="b-card"><div class="b-team b-tbd"><span class="b-flag">?</span><span class="b-name">Por determinar</span></div><div class="b-team b-tbd"><span class="b-flag">?</span><span class="b-name">Por determinar</span></div></div>
+          </div>
+        {% else %}
+          {% for g in range(tr.n_groups) %}
+          {% set base = g * 2 + 1 %}
+          <div class="b-group">
+            {% for mid in [base, base + 1] %}
+            <div class="b-slot">
+              {% set d = display_teams.get(tr.id, {}).get(mid, {}) %}
+              {% set t1 = d.get('t1', '') %}
+              {% set t2 = d.get('t2', '') %}
+              <div class="b-card">
+                <div class="b-team {% if not t1 %}b-tbd{% endif %}">
+                  <span class="b-flag">{{ flag(t1) if t1 else '?' }}</span>
+                  <span class="b-name">{{ t1 if t1 else 'Por determinar' }}</span>
+                </div>
+                <div class="b-team {% if not t2 %}b-tbd{% endif %}">
+                  <span class="b-flag">{{ flag(t2) if t2 else '?' }}</span>
+                  <span class="b-name">{{ t2 if t2 else 'Por determinar' }}</span>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% else %}
+{# ── Con predicciones: bracket visual read-only ───────────────────────────── #}
+
+{# Macro: tarjeta de partido read-only #}
+{% macro pcard(round_id, match_id) %}
+{% set row = matches_by_round.get(round_id, {}).get(match_id) %}
+{% set m    = row.match if row else none %}
+{% set pick = row.pick  if row else none %}
+{% set corr = row.correct if row else none %}
+{% set winner = m.winner if m else '' %}
+{% set d  = display_teams.get(round_id, {}).get(match_id, {}) %}
+{% set t1 = d.get('t1', '') %}
+{% set t2 = d.get('t2', '') %}
+
+<div class="b-card {% if winner %}has-winner{% elif pick %}has-pick{% endif %}"
+     data-round="{{ round_id }}" data-match="{{ match_id }}">
+  {# Team 1 #}
+  <div class="b-team
+    {%- if t1 and winner and winner == t1 %} b-won
+    {%- elif t1 and winner and winner != t1 %} b-lost
+    {%- elif pick and pick == t1 and t1 %} b-picked
+    {%- endif %}
+    {%- if not t1 %} b-tbd{% endif %}">
+    <span class="b-flag">{{ flag(t1) if t1 else '?' }}</span>
+    <span class="b-name">{{ t1 if t1 else 'Por determinar' }}</span>
+    {% if pick == t1 and t1 and not winner %}<i class="bi bi-bookmark-fill b-icon text-warning"></i>{% endif %}
+    {% if t1 and winner and winner == t1 %}<i class="bi bi-check-circle-fill b-icon text-success"></i>{% endif %}
+  </div>
+  {# Team 2 #}
+  <div class="b-team
+    {%- if t2 and winner and winner == t2 %} b-won
+    {%- elif t2 and winner and winner != t2 %} b-lost
+    {%- elif pick and pick == t2 and t2 %} b-picked
+    {%- endif %}
+    {%- if not t2 %} b-tbd{% endif %}">
+    <span class="b-flag">{{ flag(t2) if t2 else '?' }}</span>
+    <span class="b-name">{{ t2 if t2 else 'Por determinar' }}</span>
+    {% if pick == t2 and t2 and not winner %}<i class="bi bi-bookmark-fill b-icon text-warning"></i>{% endif %}
+    {% if t2 and winner and winner == t2 %}<i class="bi bi-check-circle-fill b-icon text-success"></i>{% endif %}
+  </div>
+  {# Result bar #}
+  {% if winner %}
+  <div class="b-result-bar">
+    {% if corr %}
+      <span class="text-success" style="font-size:.65rem"><i class="bi bi-trophy-fill"></i> +200 pts{% if round_id == 'final' %} +300{% endif %}</span>
+    {% elif corr == false %}
+      <span class="text-danger" style="font-size:.65rem"><i class="bi bi-x"></i> {{ pick }}</span>
+    {% endif %}
+  </div>
+  {% elif not pick %}
+  <div class="b-result-bar" style="color:#444;font-style:italic;font-size:.62rem">Sin predicción</div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% set tree_rounds = [
+  {'id': 'r32',   'label': 'Ronda de 32',  'n_groups': 8},
+  {'id': 'r16',   'label': 'Octavos',       'n_groups': 4},
+  {'id': 'qf',    'label': 'Cuartos',       'n_groups': 2},
+  {'id': 'sf',    'label': 'Semifinales',   'n_groups': 1},
+  {'id': 'final', 'label': 'Final',         'n_groups': 0},
+] %}
+
+<div class="bracket-scroll mb-4">
+  <div class="bracket-tree" id="bracketTree">
+    <svg id="bracketSvg" class="bracket-svg"></svg>
+
+    {% for tr in tree_rounds %}
+    <div class="b-round" data-round="{{ tr.id }}">
+      <div class="b-round-label">{{ tr.label }}</div>
+      <div class="b-round-body">
+        {% if tr.id == 'final' %}
+          <div class="b-group b-single">
+            {{ pcard('final', 1) }}
+          </div>
+        {% else %}
+          {% for g in range(tr.n_groups) %}
+          {% set base = g * 2 + 1 %}
+          <div class="b-group">
+            {% for mid in [base, base + 1] %}
+            <div class="b-slot">{{ pcard(tr.id, mid) }}</div>
+            {% endfor %}
+          </div>
+          {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+
+  </div>
+</div>
+
+{# Tercer puesto #}
+{% set tp_row = matches_by_round.get('tp', {}).get(1) %}
+{% set tp_d   = display_teams.get('tp', {}).get(1, {}) %}
+{% if tp_d.get('t1') or tp_d.get('t2') or tp_row %}
+<div class="tp-section mb-4">
+  <div class="tp-label"><i class="bi bi-award"></i> Tercer Puesto</div>
+  <div style="max-width:180px">{{ pcard('tp', 1) }}</div>
+</div>
+{% endif %}
+
+{% endif %}{# /ko_any_pick #}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── SVG bracket connectors ────────────────────────────────────────────────────
+function treePos(el) {
+  let x = 0, y = 0, cur = el;
+  const tree = document.getElementById('bracketTree');
+  if (!tree) return null;
+  while (cur && cur !== tree) { x += cur.offsetLeft; y += cur.offsetTop; cur = cur.offsetParent; }
+  return { x, y, w: el.offsetWidth, h: el.offsetHeight };
+}
+function addLine(svg, x1, y1, x2, y2) {
+  const l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  l.setAttribute('x1', Math.round(x1)); l.setAttribute('y1', Math.round(y1));
+  l.setAttribute('x2', Math.round(x2)); l.setAttribute('y2', Math.round(y2));
+  l.setAttribute('stroke', 'rgba(255,255,255,0.13)'); l.setAttribute('stroke-width', '1.5');
+  svg.appendChild(l);
+}
+function drawConnectors() {
+  const tree = document.getElementById('bracketTree');
+  const svg  = document.getElementById('bracketSvg');
+  if (!tree || !svg) return;
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  svg.setAttribute('width', tree.scrollWidth);
+  svg.setAttribute('height', tree.scrollHeight);
+  const pairs = [['r32','r16'],['r16','qf'],['qf','sf'],['sf','final']];
+  for (const [fromId, toId] of pairs) {
+    const from = [...document.querySelectorAll(`.b-card[data-round="${fromId}"]`)];
+    const to   = [...document.querySelectorAll(`.b-card[data-round="${toId}"]`)];
+    to.forEach((toCard, i) => {
+      const c1 = from[i * 2], c2 = from[i * 2 + 1];
+      if (!c1 || !c2) return;
+      const p1 = treePos(c1), p2 = treePos(c2), pt = treePos(toCard);
+      if (!p1 || !p2 || !pt) return;
+      const xRight = p1.x + p1.w, xLeft = pt.x, xMid = (xRight + xLeft) / 2;
+      const y1 = p1.y + p1.h / 2, y2 = p2.y + p2.h / 2, yt = pt.y + pt.h / 2;
+      addLine(svg, xRight, y1, xMid, y1); addLine(svg, xRight, y2, xMid, y2);
+      addLine(svg, xMid, y1, xMid, y2);  addLine(svg, xMid, yt, xLeft, yt);
+    });
+  }
+}
+window.addEventListener('load', drawConnectors);
+window.addEventListener('resize', drawConnectors);
+
+// ── Historial chart ───────────────────────────────────────────────────────────
+(async () => {
+  const res = await fetch('/api/historial/{{ profile_user.id }}');
+  const data = await res.json();
+  if (!data.length) return;
+
+  document.getElementById('historial-card').style.removeProperty('display');
+
+  const labels = data.map(d => d.label);
+  const ranks  = data.map(d => d.rank);
+  const points = data.map(d => d.points);
+  const totalUsers = Math.max(...ranks);
+
+  new Chart(document.getElementById('historialChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Posición',
+          data: ranks,
+          borderColor: '#ffd700',
+          backgroundColor: 'rgba(255,215,0,0.1)',
+          tension: 0.3,
+          yAxisID: 'yRank',
+          pointRadius: 5,
+          pointHoverRadius: 7,
+        },
+        {
+          label: 'Puntos',
+          data: points,
+          borderColor: '#0d6efd',
+          backgroundColor: 'rgba(13,110,253,0.1)',
+          tension: 0.3,
+          yAxisID: 'yPts',
+          pointRadius: 5,
+          pointHoverRadius: 7,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { color: '#ccc', boxWidth: 12 } } },
+      scales: {
+        yRank: {
+          type: 'linear', position: 'left', reverse: true,
+          min: 1, max: totalUsers,
+          ticks: { color: '#ffd700', stepSize: 1, precision: 0 },
+          grid: { color: 'rgba(255,255,255,0.06)' },
+          title: { display: true, text: 'Posición', color: '#ffd700' },
+        },
+        yPts: {
+          type: 'linear', position: 'right',
+          ticks: { color: '#6ea8fe' },
+          grid: { drawOnChartArea: false },
+          title: { display: true, text: 'Puntos', color: '#6ea8fe' },
+        },
+        x: { ticks: { color: '#aaa' }, grid: { color: 'rgba(255,255,255,0.06)' } },
+      },
+    },
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,987 @@
+{% extends 'base.html' %}
+{% block title %}Inicio – Porra Mundial 2026{% endblock %}
+
+{% block content %}
+<div class="hero-banner text-white">
+  <div class="row align-items-center">
+    <div class="col-md-8">
+      <h1 class="display-5 fw-bold mb-1">Porra Mundial 2026 🏆</h1>
+      <p class="lead mb-1 opacity-75">USA · México · Canadá — 11 jun – 19 jul 2026</p>
+      <div id="countdown-wrap" class="mb-3">
+        <span class="text-warning fw-semibold" id="countdown-text" style="font-size:1.05rem;"></span>
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        {% if phase.groups_open %}
+          <span class="badge bg-success fs-6 py-2 px-3"><i class="bi bi-unlock"></i> Grupos abiertos</span>
+        {% else %}
+          <span class="badge bg-secondary fs-6 py-2 px-3"><i class="bi bi-lock"></i> Grupos cerrados</span>
+        {% endif %}
+        {% for r in rounds %}
+          {% if phase[r.id ~ '_open'] %}
+          <span class="badge bg-warning text-dark fs-6 py-2 px-3"><i class="bi bi-unlock"></i> {{ r.name }} abierto</span>
+          {% endif %}
+        {% endfor %}
+        {% if phase.specials_open %}
+          <a href="{{ url_for('predict_specials') }}" class="badge bg-info text-dark fs-6 py-2 px-3 text-decoration-none">
+            <i class="bi bi-star-fill"></i> Predicciones especiales
+          </a>
+        {% endif %}
+      </div>
+    </div>
+    <div class="col-md-4 text-end d-none d-md-block">
+      {% if not user %}
+        <a href="{{ url_for('join') }}" class="btn btn-light btn-lg fw-bold">
+          <i class="bi bi-person-plus"></i> Unirse a la porra
+        </a>
+      {% else %}
+        <div class="text-white opacity-75">
+          <i class="bi bi-person-fill"></i> Jugando como<br>
+          <strong class="fs-4">{{ user.name }}</strong>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Main two-column layout -->
+<div class="row g-4">
+
+  <!-- ── LEFT: existing content ─────────────────────────────── -->
+  <div class="col-lg-8">
+
+    {% if not user %}
+    <div class="mb-3">
+      <div class="card border-warning">
+        <div class="card-body text-center py-4">
+          <h4 class="text-warning"><i class="bi bi-info-circle"></i> ¿Cómo funciona?</h4>
+          <div class="row mt-3 text-start">
+            <div class="col-md-4 mb-3">
+              <div class="d-flex gap-3">
+                <span class="badge bg-primary rounded-circle fs-5 d-flex align-items-center justify-content-center" style="width:40px;height:40px">1</span>
+                <div><strong>Fase de Grupos</strong><br><small class="text-muted">Ordena los 4 equipos de cada grupo. <span class="text-success fw-bold">+100 pts</span> por posición exacta.</small></div>
+              </div>
+            </div>
+            <div class="col-md-4 mb-3">
+              <div class="d-flex gap-3">
+                <span class="badge bg-primary rounded-circle fs-5 d-flex align-items-center justify-content-center" style="width:40px;height:40px">2</span>
+                <div><strong>Eliminatorias</strong><br><small class="text-muted">Elige ganadores ronda a ronda. <span class="text-success fw-bold">+200 pts</span> por acierto.</small></div>
+              </div>
+            </div>
+            <div class="col-md-4 mb-3">
+              <div class="d-flex gap-3">
+                <span class="badge bg-warning text-dark rounded-circle fs-5 d-flex align-items-center justify-content-center" style="width:40px;height:40px">★</span>
+                <div><strong>Campeón</strong><br><small class="text-muted">Acertar el campeón vale <span class="text-warning fw-bold">+300 pts extra</span> sobre los 200 de la final.</small></div>
+              </div>
+            </div>
+          </div>
+          <a href="{{ url_for('join') }}" class="btn btn-warning btn-lg mt-2 fw-bold">
+            <i class="bi bi-trophy-fill"></i> Unirse ahora
+          </a>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if user %}
+    <div class="row mb-3">
+      <div class="col-md-6 mb-3 mb-md-0">
+        <div class="card h-100">
+          <div class="card-body text-center py-4">
+            <i class="bi bi-table fs-1 text-primary mb-2"></i>
+            <h5>Predicción de Grupos</h5>
+            <p class="text-muted small">Ordena los equipos en los 12 grupos del Mundial</p>
+            {% if phase.groups_open %}
+              <a href="{{ url_for('predict_groups') }}" class="btn btn-primary">
+                <i class="bi bi-pencil"></i> Hacer predicción
+              </a>
+            {% else %}
+              <a href="{{ url_for('predict_groups') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-eye"></i> Ver mi predicción
+              </a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card h-100">
+          <div class="card-body text-center py-4">
+            <i class="bi bi-diagram-3 fs-1 text-warning mb-2"></i>
+            <h5>Bracket de Eliminatorias</h5>
+            <p class="text-muted small">Elige los ganadores de cada ronda</p>
+            {% set any_knockout_open = phase.r32_open or phase.r16_open or phase.qf_open or phase.sf_open or phase.final_open %}
+            {% if any_knockout_open %}
+              <a href="{{ url_for('predict_bracket') }}" class="btn btn-warning text-dark fw-bold">
+                <i class="bi bi-pencil"></i> Hacer predicción
+              </a>
+            {% else %}
+              <a href="{{ url_for('predict_bracket') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-eye"></i> Ver bracket
+              </a>
+            {% endif %}
+            {% if user.has_wildcard and not user.wildcard_used %}
+              <div class="mt-2">
+                <span class="badge bg-warning text-dark wildcard-badge">
+                  <i class="bi bi-star-fill"></i> ¡Tienes el COMODÍN!
+                </span>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Group standings + Upcoming matches -->
+    <div class="row mb-3 g-3">
+      <div class="col-md-6">
+        <div class="card h-100">
+          <div class="card-header d-flex justify-content-between align-items-center gap-2">
+            <h5 class="mb-0 text-nowrap"><i class="bi bi-table text-info"></i> Clasificación</h5>
+            <select class="form-select form-select-sm w-auto" id="groupSelect">
+              {% for letter in groups.keys() %}
+              <option value="{{ letter }}">Grupo {{ letter }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="card-body p-0" id="standingsBody">
+            <div class="text-center py-4 text-muted small"><i class="bi bi-hourglass-split me-1"></i>Cargando...</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card h-100">
+          <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-calendar3 text-success"></i> Próximos Partidos</h5>
+          </div>
+          <div class="card-body p-0" id="upcomingBody">
+            <div class="text-center py-4 text-muted small"><i class="bi bi-hourglass-split me-1"></i>Cargando...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Leaderboard preview -->
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-trophy-fill text-warning"></i> Clasificación</h5>
+        <a href="{{ url_for('leaderboard') }}" class="btn btn-sm btn-outline-light">Ver todo</a>
+      </div>
+      <div class="card-body p-0">
+        {% if leaderboard %}
+        <div class="table-responsive">
+          <table class="table table-dark table-hover mb-0">
+            <thead>
+              <tr>
+                <th class="text-center" style="width:60px">#</th>
+                <th>Jugador</th>
+                <th class="text-center d-none d-sm-table-cell">Grupos</th>
+                <th class="text-center d-none d-sm-table-cell">Elim.</th>
+                <th class="text-center">Total</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboard-body">
+              {% for entry in leaderboard %}
+              <tr>
+                <td class="text-center fw-bold
+                  {% if entry.rank == 1 %}rank-1{% elif entry.rank == 2 %}rank-2{% elif entry.rank == 3 %}rank-3{% endif %}">
+                  {% if entry.rank == 1 %}🥇{% elif entry.rank == 2 %}🥈{% elif entry.rank == 3 %}🥉{% else %}{{ entry.rank }}{% endif %}
+                </td>
+                <td>
+                  <a href="{{ url_for('user_profile', user_id=entry.id) }}" class="text-decoration-none text-white fw-semibold">{{ entry.name }}</a>
+                  {% if entry.has_wildcard and not entry.wildcard_used %}
+                    <span class="badge bg-warning text-dark ms-1"><i class="bi bi-star-fill"></i></span>
+                  {% endif %}
+                  {% if loop.first %}<span class="badge bg-danger ms-1">LÍDER</span>{% endif %}
+                </td>
+                <td class="text-center d-none d-sm-table-cell text-muted">{{ entry.group_points }}</td>
+                <td class="text-center d-none d-sm-table-cell text-muted">{{ entry.knockout_points }}</td>
+                <td class="text-center">
+                  <span class="badge bg-primary points-badge">{{ entry.total_points }}</span>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+          <i class="bi bi-people fs-1 d-block mb-2"></i>
+          Todavía no hay participantes. ¡Sé el primero!
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div><!-- /col-lg-8 -->
+
+  <!-- ── RIGHT: Racha del Día ────────────────────────────────── -->
+  <div class="col-lg-4">
+    <div class="sticky-top" style="top: 1rem;">
+      <div class="card border-warning border-opacity-50">
+        <div class="card-header d-flex align-items-center gap-2 bg-transparent">
+          <span class="fs-4">🔥</span>
+          <div>
+            <h5 class="mb-0 fw-bold">Racha del Día</h5>
+            <small class="text-muted">Predice el resultado de hoy</small>
+          </div>
+        </div>
+        <div class="card-body" id="streakBody">
+          <div class="text-center py-3 text-muted small">
+            <i class="bi bi-hourglass-split me-1"></i>Cargando...
+          </div>
+        </div>
+      </div>
+
+      <!-- Juego del Día (rotates daily) -->
+      <div class="card mt-3">
+        <div class="card-header d-flex align-items-center gap-2 bg-transparent">
+          <span class="fs-4" id="dg-icon">🎮</span>
+          <div>
+            <h5 class="mb-0 fw-bold" id="dg-title">Juego del Día</h5>
+            <small class="text-muted" id="dg-desc"></small>
+          </div>
+        </div>
+        <div class="card-body p-3" id="dg-body"></div>
+      </div>
+
+    </div><!-- /sticky-top -->
+  </div><!-- /col-lg-4 -->
+
+</div><!-- /row -->
+{% endblock %}
+
+{% block scripts %}
+<script>
+const FLAGS = {{ flags_json | safe }};
+const IS_LOGGED_IN = {{ 'true' if user else 'false' }};
+
+// ── Countdown ────────────────────────────────────────────────────────────────
+(function() {
+  const kickoff = new Date('2026-06-11T21:00:00+02:00'); // México vs Sudáfrica, 21:00 España
+  function tick() {
+    const diff = kickoff - Date.now();
+    const el = document.getElementById('countdown-text');
+    if (!el) return;
+    if (diff <= 0) {
+      el.textContent = '¡El Mundial ha comenzado! 🎉';
+      return;
+    }
+    const d = Math.floor(diff / 86400000);
+    const h = Math.floor((diff % 86400000) / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    el.textContent = `⏱️ Faltan ${d}d ${String(h).padStart(2,'0')}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s para el primer partido`;
+    setTimeout(tick, 1000);
+  }
+  tick();
+})();
+
+// ── Group standings ──────────────────────────────────────────────────────────
+let standingsData = {};
+
+function renderStandings(group) {
+  const body = document.getElementById('standingsBody');
+  const rows = standingsData[group];
+  if (!rows || !rows.length) {
+    body.innerHTML = '<div class="text-center py-4 text-muted small"><i class="bi bi-clock me-1"></i>Sin resultados todavía</div>';
+    return;
+  }
+  body.innerHTML = `<table class="table table-dark mb-0 small">
+    <thead class="table-secondary">
+      <tr>
+        <th class="text-center" style="width:36px">#</th>
+        <th>Equipo</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.map(r => `
+        <tr>
+          <td class="text-center fw-bold ${r.pos <= 2 ? 'text-success' : 'text-muted'}">${r.pos}</td>
+          <td>${FLAGS[r.team] || '🏳️'} ${r.team}</td>
+        </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+async function loadStandings() {
+  try {
+    const res = await fetch('/api/group-standings');
+    standingsData = await res.json();
+    renderStandings(document.getElementById('groupSelect').value);
+  } catch {
+    document.getElementById('standingsBody').innerHTML =
+      '<div class="text-center py-4 text-muted small">No disponible</div>';
+  }
+}
+
+document.getElementById('groupSelect')
+  .addEventListener('change', e => renderStandings(e.target.value));
+
+// ── Upcoming matches ─────────────────────────────────────────────────────────
+const STAGE_LABELS = {
+  GROUP_STAGE:    'Grupos',
+  ROUND_OF_32:    'Ronda de 32',
+  ROUND_OF_16:    'Octavos',
+  QUARTER_FINALS: 'Cuartos',
+  SEMI_FINALS:    'Semis',
+  THIRD_PLACE:    '3er Puesto',
+  FINAL:          'Final',
+};
+
+function renderMatch(m) {
+  const d = new Date(m.date);
+  const dateStr = d.toLocaleDateString('es-ES', {weekday:'short', month:'short', day:'numeric'});
+  const timeStr = d.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'});
+  const isLive  = ['IN_PLAY','PAUSED'].includes(m.status);
+  const isDone  = m.status === 'FINISHED';
+  const stageLabel = STAGE_LABELS[m.stage] || m.stage;
+  const groupBadge = m.group
+    ? `<span class="badge bg-secondary" style="font-size:.55rem">Gr. ${m.group}</span>`
+    : `<span class="badge bg-dark border border-secondary" style="font-size:.55rem">${stageLabel}</span>`;
+  const liveBadge = isLive ? '<span class="badge bg-danger" style="font-size:.6rem">EN VIVO</span>' : '';
+  const doneBadge = isDone ? '<span class="badge bg-secondary opacity-50" style="font-size:.55rem">Finalizado</span>' : '';
+  const right = isDone || isLive
+    ? `<span class="fw-bold ${isDone ? 'text-muted' : 'text-white'}">${m.score_home ?? '?'} – ${m.score_away ?? '?'}</span>`
+    : `<span class="text-muted">${timeStr}</span>`;
+  return `<div class="list-group-item bg-transparent border-secondary py-2 px-3 ${isDone ? 'opacity-60' : ''}">
+    <div class="d-flex justify-content-between align-items-center gap-2">
+      <div class="small">
+        <div class="fw-semibold">${FLAGS[m.home]||'🏳️'} ${m.home||'?'} <span class="text-muted">vs</span> ${FLAGS[m.away]||'🏳️'} ${m.away||'?'}</div>
+        <div class="d-flex gap-1 mt-1">${groupBadge}${liveBadge}${doneBadge}</div>
+      </div>
+      <div class="text-end text-nowrap small">
+        <div class="text-muted">${dateStr}</div>
+        <div>${right}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function loadUpcoming() {
+  const body = document.getElementById('upcomingBody');
+  try {
+    const res   = await fetch('/api/upcoming-matches');
+    const data  = await res.json();
+    const all   = (data.matches || []).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    const finished = all.filter(m => m.status === 'FINISHED');
+    const active   = all.filter(m => ['IN_PLAY','PAUSED'].includes(m.status));
+    const upcoming = all.filter(m => ['TIMED','SCHEDULED'].includes(m.status));
+
+    const showFinished = finished.slice(-2);
+    const showNext     = [...active, ...upcoming].slice(0, 4 - showFinished.length);
+    const display      = [...showFinished, ...showNext]
+                           .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    if (!display.length) {
+      body.innerHTML = '<div class="text-center py-4 text-muted small"><i class="bi bi-calendar-x me-1"></i>No hay partidos próximos</div>';
+      return;
+    }
+    body.innerHTML = '<div class="list-group list-group-flush">' + display.map(renderMatch).join('') + '</div>';
+  } catch {
+    body.innerHTML = '<div class="text-center py-4 text-muted small">No disponible</div>';
+  }
+}
+
+// ── Racha del Día ────────────────────────────────────────────────────────────
+let streakData = null;
+
+function renderStreak(data) {
+  const body = document.getElementById('streakBody');
+  streakData = data;
+  const { match, my_pick, my_streak, locked, rankings, votes, votes_pct, votes_total } = data;
+
+  if (!match) {
+    body.innerHTML = `
+      <div class="text-center py-4">
+        <div class="fs-1 mb-2">⏳</div>
+        <p class="text-muted small mb-1">No hay partido del día configurado.</p>
+        <p class="text-muted small">Vuelve cuando empiece el torneo.</p>
+      </div>`;
+    return;
+  }
+
+  const optLabel = { home: match.home, draw: 'Empate', away: match.away };
+  const optFlag  = { home: FLAGS[match.home]||'🏳️', draw: '🤝', away: FLAGS[match.away]||'🏳️' };
+
+  // Streak badge
+  const streakBadge = IS_LOGGED_IN
+    ? `<div class="text-center mb-3">
+        <span class="badge bg-dark border border-secondary px-3 py-2">
+          🔥 Racha: <strong class="text-warning ms-1">${my_streak.current > 0 ? my_streak.current : '—'}</strong>
+          <span class="text-muted mx-2">·</span>Récord: <strong>${my_streak.max || '—'}</strong>
+          <span class="text-muted mx-2">·</span>Pts: <strong class="text-info">${my_streak.points || 0}</strong>
+        </span>
+       </div>`
+    : `<div class="text-center mb-3"><small class="text-muted"><a href="/unirse">Únete</a> para participar</small></div>`;
+
+  // Pick result feedback
+  let resultFeedback = '';
+  if (locked && IS_LOGGED_IN && my_pick) {
+    const correct = my_pick === match.result;
+    resultFeedback = correct
+      ? `<div class="alert alert-success py-2 px-3 small mt-2 mb-0">✅ ¡Acertaste! Racha: 🔥${my_streak.current}</div>`
+      : `<div class="alert alert-danger py-2 px-3 small mt-2 mb-0">❌ Fallaste. La racha se reinicia.</div>`;
+  } else if (locked && IS_LOGGED_IN && !my_pick) {
+    resultFeedback = `<div class="alert alert-secondary py-2 px-3 small mt-2 mb-0">No participaste hoy.</div>`;
+  }
+
+  // Pick buttons
+  let buttonsHtml = '';
+  if (!IS_LOGGED_IN) {
+    buttonsHtml = `<div class="text-center">
+      <a href="/unirse" class="btn btn-outline-warning">Únete para votar</a>
+    </div>`;
+  } else {
+    buttonsHtml = `<div class="d-flex flex-column gap-2">
+      ${['home', 'draw', 'away'].map(opt => {
+        const label  = `${optFlag[opt]} ${optLabel[opt]}`;
+        const isPick = my_pick === opt;
+        const isWin  = locked && match.result === opt;
+        const isLose = locked && isPick && !isWin;
+        let cls = 'btn btn-sm w-100 ';
+        if      (isWin)    cls += 'btn-success';
+        else if (isLose)   cls += 'btn-danger';
+        else if (isPick)   cls += 'btn-warning text-dark';
+        else if (locked)   cls += 'btn-outline-secondary opacity-50';
+        else               cls += 'btn-outline-secondary';
+        const suffix = isWin ? ' ✅' : (isLose ? ' ❌' : '');
+        const click  = !locked ? `onclick="submitStreakPick('${opt}')"` : '';
+        return `<button class="${cls}" ${locked ? 'disabled' : ''} ${click}>${label}${suffix}</button>`;
+      }).join('')}
+    </div>`;
+  }
+
+  // Pie chart
+  let pieHtml = '';
+  if (votes_total > 0 && match) {
+    const homeDeg = (votes_pct.home * 3.6).toFixed(1);
+    const drawDeg = (votes_pct.draw * 3.6).toFixed(1);
+    const homeTo = parseFloat(homeDeg);
+    const drawTo = homeTo + parseFloat(drawDeg);
+    pieHtml = `<div class="mt-3 pt-3 border-top border-secondary">
+      <div class="text-muted small fw-semibold mb-2">Votos (${votes_total})</div>
+      <div class="d-flex align-items-center gap-3">
+        <div style="
+          flex-shrink:0;width:72px;height:72px;border-radius:50%;
+          background:conic-gradient(
+            #0d6efd 0deg ${homeTo}deg,
+            #6c757d ${homeTo}deg ${drawTo}deg,
+            #dc3545 ${drawTo}deg 360deg
+          );box-shadow:0 0 10px rgba(255,193,7,.15)"></div>
+        <div class="small flex-grow-1">
+          <div class="d-flex justify-content-between"><span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#0d6efd;margin-right:5px"></span>${match.home}</span><strong>${votes_pct.home}%</strong></div>
+          <div class="d-flex justify-content-between mt-1"><span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#6c757d;margin-right:5px"></span>Empate</span><strong>${votes_pct.draw}%</strong></div>
+          <div class="d-flex justify-content-between mt-1"><span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#dc3545;margin-right:5px"></span>${match.away}</span><strong>${votes_pct.away}%</strong></div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // Rankings
+  let rankingsHtml = '';
+  if (rankings && rankings.length) {
+    const rows = rankings.slice(0, 5).map((r, i) => {
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`;
+      return `<div class="d-flex justify-content-between align-items-center small py-1">
+        <span>${medal} ${r.name}</span>
+        <span class="d-flex gap-1">
+          <span class="badge bg-primary">${r.points ?? 0} pts</span>
+          <span class="badge bg-dark border border-secondary">🔥${r.current}</span>
+        </span>
+      </div>`;
+    }).join('');
+    rankingsHtml = `<div class="mt-3 pt-3 border-top border-secondary">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <span class="text-muted small fw-semibold">Ranking de rachas</span>
+        <a href="/clasificacion-racha" class="text-warning small">Ver todo →</a>
+      </div>
+      ${rows}
+    </div>`;
+  }
+
+  body.innerHTML = `
+    <div class="text-center mb-3">
+      <div class="fw-bold fs-6">${FLAGS[match.home]||'🏳️'} ${match.home} <span class="text-muted">vs</span> ${FLAGS[match.away]||'🏳️'} ${match.away}</div>
+      <small class="text-muted">¿Quién ganará?</small>
+    </div>
+    ${streakBadge}
+    ${buttonsHtml}
+    ${resultFeedback}
+    ${pieHtml}
+    ${rankingsHtml}`;
+}
+
+async function loadStreak() {
+  try {
+    const res  = await fetch('/api/streak');
+    const data = await res.json();
+    renderStreak(data);
+  } catch {
+    document.getElementById('streakBody').innerHTML =
+      '<div class="text-center py-3 text-muted small">No disponible</div>';
+  }
+}
+
+async function submitStreakPick(pick) {
+  const res = await fetch('/api/streak/pick', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({pick}),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    loadStreak();
+  } else {
+    showToast(data.msg || 'Error al guardar el pick.');
+  }
+}
+
+// ── Leaderboard live update ──────────────────────────────────────────────────
+window.onScoresUpdated = function(data) {
+  if (data.leaderboard) {
+    const tbody = document.getElementById('leaderboard-body');
+    if (tbody) {
+      const medals = ['🥇','🥈','🥉'];
+      tbody.innerHTML = data.leaderboard.slice(0,10).map((e, i) => `
+        <tr>
+          <td class="text-center fw-bold">${medals[i] || e.rank}</td>
+          <td><a href="/perfil/${e.id}" class="text-decoration-none text-white fw-semibold">${e.name}</a>${i===0?'<span class="badge bg-danger ms-1">LÍDER</span>':''}</td>
+          <td class="text-center d-none d-sm-table-cell text-muted">${e.group_points}</td>
+          <td class="text-center d-none d-sm-table-cell text-muted">${e.knockout_points}</td>
+          <td class="text-center"><span class="badge bg-primary points-badge">${e.total_points}</span></td>
+        </tr>`).join('');
+    }
+  }
+  loadStandings();
+};
+
+// Listen for streak_updated (socket exposed globally in base.html)
+if (typeof socket !== 'undefined') {
+  socket.on('streak_updated', loadStreak);
+}
+
+window.addEventListener('load', () => {
+  loadStandings();
+  loadUpcoming();
+  loadStreak();
+  setInterval(loadUpcoming, 60_000);
+  setInterval(loadStreak, 120_000);
+  initDailyGame();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DAILY GAMES SYSTEM
+// Each game is {name, icon, desc, render(container)}. render() sets up the game
+// inside the provided DOM element. Add new games to the array — order determines
+// the rotation schedule (day 0 = game 0, day 1 = game 1, ...).
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Seeded random: produces a deterministic value 0–255 from an integer seed.
+function seededByte(seed) {
+  seed = Math.imul(seed ^ (seed >>> 16), 0x45d9f3b);
+  seed = Math.imul(seed ^ (seed >>> 16), 0x45d9f3b);
+  return ((seed ^ (seed >>> 16)) >>> 0) & 0xFF;
+}
+
+const DAILY_GAMES = [
+
+  // ── 0: Penaltis ─────────────────────────────────────────────────────────────
+  {
+    name: 'Penaltis',
+    icon: '⚽',
+    desc: '¿Cuántos metes en 30 segundos?',
+    render(el) {
+      el.innerHTML = `
+        <div id="clicker-area"
+             style="position:relative;height:130px;background:#0a2e0a;border-radius:8px;
+                    overflow:hidden;border:2px solid #1a5c1a;cursor:crosshair;">
+          <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+                      width:55%;height:75%;border:1.5px solid rgba(255,255,255,0.15);pointer-events:none;"></div>
+          <div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);
+                      width:30%;height:35%;border-top:1.5px solid rgba(255,255,255,0.15);pointer-events:none;"></div>
+          <button id="ball" onclick="clickBall()"
+                  style="position:absolute;left:calc(50% - 18px);top:calc(50% - 18px);
+                         background:none;border:none;font-size:2.2rem;line-height:1;
+                         cursor:pointer;user-select:none;transition:transform 0.08s;padding:0;">⚽</button>
+        </div>
+        <div class="d-flex justify-content-between align-items-end mt-2">
+          <div><span class="fw-bold fs-3 text-success" id="clicker-score">0</span><small class="text-muted ms-1">goles</small></div>
+          <div class="text-center">
+            <div class="fw-bold fs-4" id="clicker-timer" style="color:#ffc107;min-width:2.5ch;line-height:1;">30</div>
+            <small class="text-muted" style="font-size:.6rem">seg</small>
+          </div>
+          <div class="text-end">
+            <small class="text-muted d-block" style="font-size:.7rem">Récord</small>
+            <span class="fw-bold text-warning" id="clicker-best">—</span>
+          </div>
+        </div>
+        <button class="btn btn-success btn-sm w-100 mt-2 fw-bold" id="clicker-btn" onclick="startClicker()">
+          <i class="bi bi-play-fill"></i> ¡Jugar!
+        </button>`;
+      const best = localStorage.getItem('porra_clicker_best');
+      document.getElementById('clicker-best').textContent = best || '—';
+    },
+  },
+
+  // ── 1: Tiempo de Reacción (hoy) ─────────────────────────────────────────────
+  {
+    name: 'Tiempo de Reacción',
+    icon: '⚡',
+    desc: 'Pulsa en cuanto veas el verde',
+    render(el) {
+      el.innerHTML = `
+        <div id="rt-box" onclick="rtClick()"
+             style="height:130px;border-radius:8px;background:#6c757d;cursor:pointer;
+                    display:flex;align-items:center;justify-content:center;user-select:none;
+                    transition:background 0.15s;">
+          <div id="rt-msg" style="font-size:1.1rem;font-weight:bold;color:#fff;text-align:center;pointer-events:none;">
+            Pulsa para empezar
+          </div>
+        </div>
+        <div class="d-flex justify-content-between align-items-end mt-2">
+          <div><span class="fw-bold fs-3" id="rt-result" style="color:#ffc107;">—</span><small class="text-muted ms-1">ms</small></div>
+          <div class="text-end">
+            <small class="text-muted d-block" style="font-size:.7rem">Récord</small>
+            <span class="fw-bold text-warning" id="rt-best">—</span>
+          </div>
+        </div>
+        <div class="text-muted small text-center mt-1" id="rt-rating"></div>`;
+      const best = localStorage.getItem('porra_rt_best');
+      document.getElementById('rt-best').textContent = best ? best + ' ms' : '—';
+    },
+  },
+
+  // ── 2: Adivina el Color ─────────────────────────────────────────────────────
+  {
+    name: 'Adivina el Color',
+    icon: '🎨',
+    desc: 'Memoriza y recrea el color exacto',
+    render(el) {
+      const tR = Math.floor(Math.random() * 256);
+      const tG = Math.floor(Math.random() * 256);
+      const tB = Math.floor(Math.random() * 256);
+      const sR = Math.floor(Math.random() * 256);
+      const sG = Math.floor(Math.random() * 256);
+      const sB = Math.floor(Math.random() * 256);
+
+      el.innerHTML = `
+        <!-- Phase 1: memorize -->
+        <div id="cg1">
+          <div style="height:110px;border-radius:8px;background:rgb(${tR},${tG},${tB});" id="cg-swatch"></div>
+          <p class="text-muted small text-center mt-2 mb-3">Memoriza este color</p>
+          <button class="btn btn-warning w-100 fw-bold" onclick="cgReveal()">
+            <i class="bi bi-eye-slash-fill"></i> ¡Listo, ocultar!
+          </button>
+        </div>
+        <!-- Phase 2: sliders (hidden) -->
+        <div id="cg2" style="display:none;">
+          <div id="cg-preview" style="height:70px;border-radius:8px;background:rgb(${sR},${sG},${sB});margin-bottom:.75rem;"></div>
+          <div class="mb-2">
+            <div class="d-flex justify-content-between small mb-1">
+              <span class="fw-bold text-danger">R</span><span id="cg-rv">${sR}</span>
+            </div>
+            <input type="range" class="form-range" id="cg-r" min="0" max="255" value="${sR}" oninput="cgSync()">
+          </div>
+          <div class="mb-2">
+            <div class="d-flex justify-content-between small mb-1">
+              <span class="fw-bold text-success">G</span><span id="cg-gv">${sG}</span>
+            </div>
+            <input type="range" class="form-range" id="cg-g" min="0" max="255" value="${sG}" oninput="cgSync()">
+          </div>
+          <div class="mb-3">
+            <div class="d-flex justify-content-between small mb-1">
+              <span class="fw-bold text-info">B</span><span id="cg-bv">${sB}</span>
+            </div>
+            <input type="range" class="form-range" id="cg-b" min="0" max="255" value="${sB}" oninput="cgSync()">
+          </div>
+          <button class="btn btn-primary w-100 fw-bold" onclick="cgCheck(${tR},${tG},${tB})">
+            <i class="bi bi-check2-circle"></i> Comprobar
+          </button>
+        </div>
+        <!-- Phase 3: result (hidden) -->
+        <div id="cg3" style="display:none;">
+          <div class="d-flex gap-2 mb-3">
+            <div style="flex:1;text-align:center;">
+              <div style="height:70px;border-radius:8px;background:rgb(${tR},${tG},${tB});" ></div>
+              <small class="text-muted">Original</small>
+            </div>
+            <div style="flex:1;text-align:center;">
+              <div style="height:70px;border-radius:8px;" id="cg-guess-swatch"></div>
+              <small class="text-muted">Tu color</small>
+            </div>
+          </div>
+          <div class="text-center mb-3">
+            <div class="fw-bold" style="font-size:2.5rem;" id="cg-pct"></div>
+            <div class="text-muted small" id="cg-msg"></div>
+            <div class="text-muted small mt-1" id="cg-rgb-info"></div>
+          </div>
+          <button class="btn btn-outline-secondary btn-sm w-100" onclick="cgRetry()">
+            <i class="bi bi-arrow-repeat"></i> Reintentar
+          </button>
+        </div>`;
+    },
+  },
+
+  // ── 3: Clicks por Segundo (hoy) ─────────────────────────────────────────────
+  {
+    name: 'Clicks por Segundo',
+    icon: '🖱️',
+    desc: '¿Cuántos clicks en 5 segundos?',
+    render(el) {
+      el.innerHTML = `
+        <div id="cps-box" onclick="cpsClick()"
+             style="height:130px;border-radius:8px;background:#1a1a2e;border:2px solid #333;
+                    cursor:pointer;display:flex;flex-direction:column;align-items:center;
+                    justify-content:center;user-select:none;transition:background 0.05s;">
+          <div class="fw-bold" id="cps-count" style="font-size:3rem;color:#fff;line-height:1;">0</div>
+          <div id="cps-msg" style="color:#aaa;font-size:.85rem;margin-top:.3rem;">Pulsa aquí para empezar</div>
+        </div>
+        <div class="d-flex justify-content-between align-items-end mt-2">
+          <div>
+            <span class="fw-bold fs-3 text-info" id="cps-result">—</span>
+            <small class="text-muted ms-1">CPS</small>
+          </div>
+          <div class="text-center">
+            <div class="fw-bold fs-4" id="cps-timer" style="color:#ffc107;min-width:2ch;line-height:1;">5</div>
+            <small class="text-muted" style="font-size:.6rem">seg</small>
+          </div>
+          <div class="text-end">
+            <small class="text-muted d-block" style="font-size:.7rem">Récord</small>
+            <span class="fw-bold text-warning" id="cps-best">—</span>
+          </div>
+        </div>
+        <button class="btn btn-outline-secondary btn-sm w-100 mt-2" id="cps-reset-btn" onclick="cpsReset()" style="display:none;">
+          <i class="bi bi-arrow-repeat"></i> Reintentar
+        </button>`;
+      const best = localStorage.getItem('porra_cps_best');
+      document.getElementById('cps-best').textContent = best ? best + ' CPS' : '—';
+    },
+  },
+
+];
+
+// ── Daily game init ──────────────────────────────────────────────────────────
+function initDailyGame() {
+  const day  = Math.floor(Date.now() / 86400000);
+  const game = DAILY_GAMES[day % DAILY_GAMES.length];
+  document.getElementById('dg-icon').textContent  = game.icon;
+  document.getElementById('dg-title').textContent = game.name;
+  document.getElementById('dg-desc').textContent  = game.desc;
+  game.render(document.getElementById('dg-body'));
+}
+
+// ── Penaltis logic ───────────────────────────────────────────────────────────
+let clickerActive = false, clickerScore = 0, clickerInterval = null, clickerSecs = 30;
+
+function clickBall() {
+  if (!clickerActive) return;
+  clickerScore++;
+  document.getElementById('clicker-score').textContent = clickerScore;
+  const ball = document.getElementById('ball');
+  ball.style.transform = 'scale(1.5) rotate(30deg)';
+  setTimeout(() => { ball.style.transform = ''; _moveBall(); }, 90);
+}
+
+function _moveBall() {
+  const area = document.getElementById('clicker-area');
+  const ball = document.getElementById('ball');
+  ball.style.left = (Math.random() * (area.clientWidth  - 38)) + 'px';
+  ball.style.top  = (Math.random() * (area.clientHeight - 38)) + 'px';
+}
+
+function startClicker() {
+  if (clickerActive) return;
+  clickerActive = true; clickerScore = 0; clickerSecs = 30;
+  document.getElementById('clicker-score').textContent = '0';
+  document.getElementById('clicker-timer').textContent = '30';
+  document.getElementById('clicker-timer').style.color = '#ffc107';
+  const btn = document.getElementById('clicker-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-stopwatch-fill"></i> ¡Venga!';
+  _moveBall();
+  clickerInterval = setInterval(() => {
+    clickerSecs--;
+    const t = document.getElementById('clicker-timer');
+    t.textContent = clickerSecs;
+    if (clickerSecs <= 5) t.style.color = '#dc3545';
+    if (clickerSecs <= 0) _endClicker();
+  }, 1000);
+}
+
+function _endClicker() {
+  clearInterval(clickerInterval);
+  clickerActive = false;
+  const prev = parseInt(localStorage.getItem('porra_clicker_best') || '0', 10);
+  const isNew = clickerScore > prev;
+  if (isNew) localStorage.setItem('porra_clicker_best', clickerScore);
+  document.getElementById('clicker-best').textContent = isNew ? clickerScore : prev;
+  const t = document.getElementById('clicker-timer');
+  t.textContent = '✓'; t.style.color = '#198754';
+  const ball = document.getElementById('ball');
+  ball.style.left = 'calc(50% - 18px)'; ball.style.top = 'calc(50% - 18px)';
+  const btn = document.getElementById('clicker-btn');
+  btn.disabled = false;
+  btn.innerHTML = isNew
+    ? `<i class="bi bi-trophy-fill text-warning"></i> ¡Récord! ${clickerScore} goles – Repetir`
+    : `<i class="bi bi-arrow-repeat"></i> Repetir (${clickerScore} goles)`;
+}
+
+// ── Color game logic ─────────────────────────────────────────────────────────
+function cgSync() {
+  const r = document.getElementById('cg-r').value;
+  const g = document.getElementById('cg-g').value;
+  const b = document.getElementById('cg-b').value;
+  document.getElementById('cg-rv').textContent = r;
+  document.getElementById('cg-gv').textContent = g;
+  document.getElementById('cg-bv').textContent = b;
+  document.getElementById('cg-preview').style.background = `rgb(${r},${g},${b})`;
+}
+
+function cgReveal() {
+  document.getElementById('cg1').style.display = 'none';
+  document.getElementById('cg2').style.display = 'block';
+}
+
+function cgCheck(tR, tG, tB) {
+  const gR = parseInt(document.getElementById('cg-r').value);
+  const gG = parseInt(document.getElementById('cg-g').value);
+  const gB = parseInt(document.getElementById('cg-b').value);
+  const dist = Math.sqrt((gR-tR)**2 + (gG-tG)**2 + (gB-tB)**2);
+  const pct  = Math.round((1 - dist / 441.67) * 100);
+  const msgs = [
+    [97, '👁️ ¡Perfecto! Ojo de artista'],
+    [90, '🎨 ¡Muy cerca! Gran ojo'],
+    [75, '👍 Bien, pero no del todo'],
+    [55, '🤔 Bastante lejos'],
+    [0,  '😅 ¿Eres daltónico?'],
+  ];
+  const msg = msgs.find(([min]) => pct >= min)[1];
+
+  document.getElementById('cg2').style.display = 'none';
+  document.getElementById('cg3').style.display = 'block';
+  document.getElementById('cg-guess-swatch').style.background = `rgb(${gR},${gG},${gB})`;
+  document.getElementById('cg-pct').textContent = `${pct}%`;
+  document.getElementById('cg-msg').textContent = msg;
+  document.getElementById('cg-rgb-info').textContent =
+    `Original: rgb(${tR},${tG},${tB})  ·  Tuyo: rgb(${gR},${gG},${gB})`;
+}
+
+function cgRetry() {
+  // Re-render the same game
+  const day  = Math.floor(Date.now() / 86400000);
+  DAILY_GAMES[day % DAILY_GAMES.length].render(document.getElementById('dg-body'));
+}
+
+// ── CPS logic ────────────────────────────────────────────────────────────────
+let cpsActive = false, cpsClicks = 0, cpsInterval = null, cpsSecs = 5;
+
+let cpsDone = false;
+
+function cpsReset() {
+  cpsDone = false;
+  cpsClicks = 0; cpsSecs = 5;
+  const box = document.getElementById('cps-box');
+  const resetBtn = document.getElementById('cps-reset-btn');
+  if (box) { box.style.background = '#1a1a2e'; box.style.cursor = 'pointer'; }
+  if (resetBtn) resetBtn.style.display = 'none';
+  const count = document.getElementById('cps-count');
+  const msg = document.getElementById('cps-msg');
+  const res = document.getElementById('cps-result');
+  const timer = document.getElementById('cps-timer');
+  if (count) count.textContent = '0';
+  if (msg) msg.textContent = 'Pulsa aquí para empezar';
+  if (res) res.textContent = '—';
+  if (timer) { timer.textContent = '5'; timer.style.color = '#ffc107'; }
+}
+
+function cpsClick() {
+  if (cpsDone) return;
+  if (!cpsActive) {
+    cpsActive = true; cpsClicks = 0; cpsSecs = 5;
+    document.getElementById('cps-count').textContent = '0';
+    document.getElementById('cps-result').textContent = '—';
+    document.getElementById('cps-timer').textContent = '5';
+    document.getElementById('cps-timer').style.color = '#ffc107';
+    document.getElementById('cps-msg').textContent = '¡Dale!';
+    document.getElementById('cps-box').style.background = '#0d2137';
+    cpsInterval = setInterval(() => {
+      cpsSecs--;
+      const t = document.getElementById('cps-timer');
+      if (t) { t.textContent = cpsSecs; if (cpsSecs <= 2) t.style.color = '#dc3545'; }
+      if (cpsSecs <= 0) _endCps();
+    }, 1000);
+  }
+  if (!cpsActive) return;
+  cpsClicks++;
+  const el = document.getElementById('cps-count');
+  if (el) el.textContent = cpsClicks;
+  const box = document.getElementById('cps-box');
+  if (box) { box.style.background = '#0a3d62'; setTimeout(() => { if (box) box.style.background = '#0d2137'; }, 60); }
+}
+
+function _endCps() {
+  clearInterval(cpsInterval);
+  cpsActive = false;
+  const cps = (cpsClicks / 5).toFixed(2);
+  const prev = parseFloat(localStorage.getItem('porra_cps_best') || '0');
+  const isNew = parseFloat(cps) > prev;
+  if (isNew) localStorage.setItem('porra_cps_best', cps);
+  const res = document.getElementById('cps-result');
+  const best = document.getElementById('cps-best');
+  const msg = document.getElementById('cps-msg');
+  const timer = document.getElementById('cps-timer');
+  const box = document.getElementById('cps-box');
+  if (res) res.textContent = cps;
+  if (best) best.textContent = (isNew ? cps : prev) + ' CPS';
+  if (timer) { timer.textContent = '✓'; timer.style.color = '#198754'; }
+  if (box) box.style.background = '#1a1a2e';
+  const ratings = [[14,'⚡ ¿Eres humano?'],[10,'🔥 Top tier'],[7,'👍 Muy rápido'],[5,'🙂 Normal'],[0,'🐢 Con calma...']];
+  if (msg) msg.textContent = (isNew ? '¡Nuevo récord! ' : '') + ratings.find(([min]) => parseFloat(cps) >= min)[1];
+  cpsDone = true;
+  const resetBtn = document.getElementById('cps-reset-btn');
+  if (resetBtn) resetBtn.style.display = 'block';
+}
+
+// ── Reaction time logic ──────────────────────────────────────────────────────
+let rtState = 'idle'; // idle | waiting | ready
+let rtTimeout = null, rtStart = null;
+
+function rtClick() {
+  if (rtState === 'idle') {
+    rtState = 'waiting';
+    const box = document.getElementById('rt-box');
+    box.style.background = '#dc3545';
+    document.getElementById('rt-msg').textContent = 'Espera...';
+    document.getElementById('rt-result').textContent = '—';
+    document.getElementById('rt-rating').textContent = '';
+    const delay = 1500 + Math.random() * 3000;
+    rtTimeout = setTimeout(() => {
+      rtState = 'ready';
+      box.style.background = '#198754';
+      document.getElementById('rt-msg').textContent = '¡AHORA!';
+      rtStart = performance.now();
+    }, delay);
+  } else if (rtState === 'waiting') {
+    clearTimeout(rtTimeout);
+    rtState = 'idle';
+    document.getElementById('rt-box').style.background = '#6c757d';
+    document.getElementById('rt-msg').textContent = '¡Demasiado pronto! Pulsa para reintentar';
+  } else if (rtState === 'ready') {
+    const ms = Math.round(performance.now() - rtStart);
+    rtState = 'idle';
+    const box = document.getElementById('rt-box');
+    box.style.background = '#6c757d';
+    document.getElementById('rt-msg').textContent = 'Pulsa para repetir';
+    document.getElementById('rt-result').textContent = ms;
+    const ratings = [[180,'⚡ ¡Reflejo de portero profesional!'],[250,'🟢 Muy bueno'],[350,'🟡 Normal'],[500,'🔴 Lento'],[9999,'🐢 ¿Estabas dormido?']];
+    document.getElementById('rt-rating').textContent = ratings.find(([max]) => ms <= max)[1];
+    const prev = parseInt(localStorage.getItem('porra_rt_best') || '9999', 10);
+    if (ms < prev) {
+      localStorage.setItem('porra_rt_best', ms);
+      document.getElementById('rt-best').textContent = ms + ' ms';
+    }
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,658 @@
+{% extends 'base.html' %}
+{% block title %}Eliminatorias – Porra Mundial 2026{% endblock %}
+
+{# ── Expected match counts per round ─────────────────────────────────────── #}
+{% set COUNTS = {'r32': 16, 'r16': 8, 'qf': 4, 'sf': 2, 'tp': 1, 'final': 1} %}
+
+{# ── Macro: match card ────────────────────────────────────────────────────── #}
+{% macro bcard(round_id, match_id, m, pick, can_pick, has_wc) %}
+{% set t1 = m.team1 if m else '' %}
+{% set t2 = m.team2 if m else '' %}
+{% set winner = m.winner if m else '' %}
+{% set has_actual_teams = t1 and t2 %}
+<div class="b-card {% if winner %}has-winner{% elif pick %}has-pick{% endif %}"
+     data-round="{{ round_id }}" data-match="{{ match_id }}">
+
+  {# Team 1 #}
+  {% set is_tbd1 = not t1 %}
+  <div class="b-team
+    {% if t1 and winner and winner == t1 %}b-won
+    {% elif t1 and winner and winner != t1 %}b-lost
+    {% elif pick == t1 and t1 %}b-picked{% endif %}
+    {% if is_tbd1 %}b-tbd{% endif %}
+    {% if can_pick and t1 %}clickable{% endif %}"
+    data-round="{{ round_id }}" data-match="{{ match_id }}"
+    data-team="{{ t1 }}" data-slot="0"
+    {% if t1 %}data-actual="1"{% endif %}
+    {% if can_pick and t1 %}onclick="pickTeam(this)"{% endif %}>
+    <span class="b-flag">{{ flag(t1) if t1 else '?' }}</span>
+    <span class="b-name">{{ t1 if t1 else 'Por determinar' }}</span>
+    {% if pick == t1 and t1 and not winner %}<i class="bi bi-bookmark-fill b-icon text-warning"></i>{% endif %}
+    {% if t1 and winner and winner == t1 %}<i class="bi bi-check-circle-fill b-icon text-success"></i>{% endif %}
+  </div>
+
+  {# Team 2 #}
+  {% set is_tbd2 = not t2 %}
+  <div class="b-team
+    {% if t2 and winner and winner == t2 %}b-won
+    {% elif t2 and winner and winner != t2 %}b-lost
+    {% elif pick == t2 and t2 %}b-picked{% endif %}
+    {% if is_tbd2 %}b-tbd{% endif %}
+    {% if can_pick and t2 %}clickable{% endif %}"
+    data-round="{{ round_id }}" data-match="{{ match_id }}"
+    data-team="{{ t2 }}" data-slot="1"
+    {% if t2 %}data-actual="1"{% endif %}
+    {% if can_pick and t2 %}onclick="pickTeam(this)"{% endif %}>
+    <span class="b-flag">{{ flag(t2) if t2 else '?' }}</span>
+    <span class="b-name">{{ t2 if t2 else 'Por determinar' }}</span>
+    {% if pick == t2 and t2 and not winner %}<i class="bi bi-bookmark-fill b-icon text-warning"></i>{% endif %}
+    {% if t2 and winner and winner == t2 %}<i class="bi bi-check-circle-fill b-icon text-success"></i>{% endif %}
+  </div>
+
+  {% if winner %}
+  <div class="b-result-bar">
+    {% if pick == winner %}
+      <span class="text-success" style="font-size:.65rem">
+        <i class="bi bi-trophy-fill"></i> +200 pts{% if round_id == 'final' %} +300{% endif %}
+      </span>
+    {% elif pick %}
+      <span class="text-danger" style="font-size:.65rem">
+        <i class="bi bi-x"></i> {{ pick }}
+      </span>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% block extra_head %}
+<style>
+/* ── Bracket layout ───────────────────────────────────────── */
+.bracket-scroll {
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 12px;
+}
+.bracket-tree {
+  display: flex;
+  align-items: stretch;
+  position: relative;
+  gap: 0;
+  padding: 4px 0 8px;
+  min-height: 360px;
+}
+.bracket-svg {
+  position: absolute;
+  top: 0; left: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Round columns ────────────────────────────────────────── */
+.b-round {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 172px;
+  position: relative;
+  z-index: 1;
+}
+.b-round + .b-round { margin-left: 28px; }
+
+.b-round-label {
+  font-size: .58rem;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: #666;
+  text-align: center;
+  padding-bottom: 6px;
+  height: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.b-round-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+/* ── Groups & slots ───────────────────────────────────────── */
+.b-group {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  flex: 1;
+}
+.b-single { justify-content: center; }
+.b-slot   { padding: 4px 0; }
+
+/* ── Match card ───────────────────────────────────────────── */
+.b-card {
+  background: #16162a;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 7px;
+  overflow: hidden;
+  width: 100%;
+  transition: border-color .2s;
+}
+.b-card.has-pick   { border-color: rgba(255,215,0,.3); }
+.b-card.has-winner { border-color: rgba(76,175,80,.3); }
+
+/* ── Team rows ────────────────────────────────────────────── */
+.b-team {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  font-size: .8rem;
+  font-weight: 500;
+  transition: background .12s;
+  cursor: default;
+}
+.b-team.clickable { cursor: pointer; }
+.b-team.clickable:hover { background: rgba(255,255,255,.07); }
+.b-team + .b-team { border-top: 1px solid rgba(255,255,255,.06); }
+.b-flag { flex-shrink: 0; }
+.b-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .78rem; }
+.b-icon { flex-shrink: 0; font-size: .7rem; }
+
+.b-team.b-picked { background: rgba(255,215,0,.1); color: #ffd700; }
+.b-team.b-won    { background: rgba(76,175,80,.12); color: #5cb85c; }
+.b-team.b-lost   { opacity: .35; }
+.b-team.b-tbd    { color: #444; font-style: italic; font-size: .72rem; cursor: default !important; }
+
+.b-result-bar {
+  padding: 2px 9px 4px;
+  border-top: 1px solid rgba(255,255,255,.05);
+  font-size: .65rem;
+  min-height: 18px;
+}
+
+/* ── Third place ──────────────────────────────────────────── */
+.tp-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255,255,255,.07);
+}
+.tp-label {
+  font-size: .6rem;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: #666;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+  <div>
+    <h2 class="fw-bold mb-1"><i class="bi bi-diagram-3"></i> Eliminatorias</h2>
+    <p class="text-muted mb-0 small">
+      <strong>+200 pts</strong> por acierto · <strong>+300 pts extra</strong> si aciertas el campeón
+      {% if bracket_any_open %}
+      · <span class="text-success"><i class="bi bi-unlock-fill"></i> Abiertas — rellena el bracket completo</span>
+      {% endif %}
+    </p>
+  </div>
+  {% if bracket_any_open %}
+  <button class="btn btn-sm btn-outline-danger align-self-center" onclick="resetAllPicks()">
+    <i class="bi bi-arrow-counterclockwise"></i> Reiniciar bracket
+  </button>
+  {% endif %}
+</div>
+
+{% if user.has_wildcard and not user.wildcard_used %}
+<div class="alert alert-warning d-flex align-items-center gap-2 py-2 mb-3">
+  <i class="bi bi-star-fill fs-5"></i>
+  <div class="small"><strong>¡Tienes el COMODÍN!</strong> Puedes cambiar una predicción bloqueada. Haz clic en cualquier equipo de una ronda cerrada.</div>
+</div>
+{% endif %}
+
+{% set has_wildcard = user.has_wildcard and not user.wildcard_used %}
+
+{# Phase badges — only show individual round badges if bracket_open is off #}
+{% if not phase.get('bracket_open') %}
+<div class="d-flex gap-2 flex-wrap mb-3">
+{% for r in rounds if r.id != 'tp' %}
+{% set is_open = phase[r.id ~ '_open'] %}
+<span class="badge py-1 px-2 {% if is_open %}bg-success{% else %}bg-secondary opacity-50{% endif %}" style="font-size:.6rem">
+  {% if is_open %}<i class="bi bi-unlock-fill me-1"></i>{% else %}<i class="bi bi-lock-fill me-1"></i>{% endif %}{{ r.name }}
+</span>
+{% endfor %}
+</div>
+{% endif %}
+
+{# ── BRACKET TREE ─────────────────────────────────────────────────────────── #}
+{% if not bracket_any_open %}
+<div style="position:relative;">
+  <div style="filter:blur(4px) brightness(0.5); pointer-events:none; user-select:none;">
+{% endif %}
+<div class="bracket-scroll">
+  <div class="bracket-tree" id="bracketTree">
+    <svg id="bracketSvg" class="bracket-svg"></svg>
+
+    {% set tree_rounds = [
+      {'id': 'r32',   'label': 'Ronda de 32',  'n_groups': 8},
+      {'id': 'r16',   'label': 'Octavos',       'n_groups': 4},
+      {'id': 'qf',    'label': 'Cuartos',       'n_groups': 2},
+      {'id': 'sf',    'label': 'Semifinales',   'n_groups': 1},
+      {'id': 'final', 'label': 'Final',         'n_groups': 0},
+    ] %}
+
+    {% for tr in tree_rounds %}
+    {% set round_id  = tr.id %}
+    {% set round_map = matches_by_round.get(round_id, {}) %}
+    {% set is_open   = phase.get(round_id ~ '_open', false) or phase.get('bracket_open', false) %}
+    {% set count     = COUNTS[round_id] %}
+
+    <div class="b-round" data-round="{{ round_id }}">
+      <div class="b-round-label">{{ tr.label }}</div>
+      <div class="b-round-body">
+
+        {% if round_id == 'final' %}
+          <div class="b-group b-single">
+            {% set m   = round_map.get(1) %}
+            {% set pick = user_picks.get(('final', 1)) %}
+            {{ bcard('final', 1, m, pick, is_open, has_wildcard) }}
+          </div>
+
+        {% else %}
+          {% set n_groups = tr.n_groups %}
+          {% for g in range(n_groups) %}
+          {% set base = g * 2 + 1 %}
+          <div class="b-group">
+            {% for mid in [base, base + 1] %}
+            <div class="b-slot">
+              {% set m   = round_map.get(mid) %}
+              {% set pick = user_picks.get((round_id, mid)) %}
+              {{ bcard(round_id, mid, m, pick, is_open, has_wildcard) }}
+            </div>
+            {% endfor %}
+          </div>
+          {% endfor %}
+        {% endif %}
+
+      </div>
+    </div>
+    {% endfor %}
+
+  </div>{# /bracket-tree #}
+</div>{# /bracket-scroll #}
+
+{# ── TERCER PUESTO ────────────────────────────────────────────────────────── #}
+{% set tp_map  = matches_by_round.get('tp', {}) %}
+{% set tp_open = phase.get('tp_open', false) or phase.get('bracket_open', false) %}
+<div class="tp-section">
+  <div class="tp-label">
+    <i class="bi bi-award"></i> Tercer Puesto
+    {% if tp_open %}<span class="badge bg-success" style="font-size:.5rem;padding:2px 5px">ABIERTO</span>{% endif %}
+  </div>
+  <div style="max-width:180px">
+    {% set tp_m   = tp_map.get(1) %}
+    {% set tp_pick = user_picks.get(('tp', 1)) %}
+    {{ bcard('tp', 1, tp_m, tp_pick, tp_open, has_wildcard) }}
+  </div>
+</div>
+{% if not bracket_any_open %}
+  </div>{# /blur wrapper #}
+  <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;z-index:10;">
+    <div class="text-center px-3">
+      <div style="font-size:3rem;">🔒</div>
+      <h4 class="fw-bold mt-2 mb-1">Disponible tras la fase de grupos</h4>
+      <p class="text-muted mb-0 small">El bracket se abrirá cuando terminen los partidos de grupos<br>y el admin configure los cruces.</p>
+    </div>
+  </div>
+</div>{# /position:relative #}
+{% endif %}
+
+{# ── Wildcard modal ─────────────────────────────────────────────────────── #}
+{% if has_wildcard %}
+<div class="modal fade" id="wildcardModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border-warning">
+      <div class="modal-header border-warning">
+        <h5 class="modal-title text-warning"><i class="bi bi-star-fill"></i> Usar Comodín</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>¿Seguro que quieres usar tu <strong>comodín</strong> para cambiar tu predicción a
+          <span id="wildcard-team-name" class="text-warning fw-bold"></span>?</p>
+        <p class="text-muted small">Solo tienes un comodín y no podrás recuperarlo.</p>
+      </div>
+      <div class="modal-footer border-0">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-warning fw-bold" id="confirm-wildcard">
+          <i class="bi bi-star-fill"></i> ¡Usar Comodín!
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── SVG connector lines ──────────────────────────────────────────────────────
+function treePos(el) {
+  let x = 0, y = 0, cur = el;
+  const tree = document.getElementById('bracketTree');
+  while (cur && cur !== tree) { x += cur.offsetLeft; y += cur.offsetTop; cur = cur.offsetParent; }
+  return { x, y, w: el.offsetWidth, h: el.offsetHeight };
+}
+function addLine(svg, x1, y1, x2, y2) {
+  const l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  l.setAttribute('x1', Math.round(x1)); l.setAttribute('y1', Math.round(y1));
+  l.setAttribute('x2', Math.round(x2)); l.setAttribute('y2', Math.round(y2));
+  l.setAttribute('stroke', 'rgba(255,255,255,0.13)');
+  l.setAttribute('stroke-width', '1.5');
+  svg.appendChild(l);
+}
+function drawConnectors() {
+  const tree = document.getElementById('bracketTree');
+  const svg  = document.getElementById('bracketSvg');
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  svg.setAttribute('width',  tree.scrollWidth);
+  svg.setAttribute('height', tree.scrollHeight);
+
+  const pairs = [['r32','r16'],['r16','qf'],['qf','sf'],['sf','final']];
+  for (const [fromId, toId] of pairs) {
+    const from = [...document.querySelectorAll(`.b-card[data-round="${fromId}"]`)];
+    const to   = [...document.querySelectorAll(`.b-card[data-round="${toId}"]`)];
+    to.forEach((toCard, i) => {
+      const c1 = from[i * 2], c2 = from[i * 2 + 1];
+      if (!c1 || !c2) return;
+      const p1 = treePos(c1), p2 = treePos(c2), pt = treePos(toCard);
+      const xRight = p1.x + p1.w;
+      const xLeft  = pt.x;
+      const xMid   = (xRight + xLeft) / 2;
+      const y1 = p1.y + p1.h / 2, y2 = p2.y + p2.h / 2, yt = pt.y + pt.h / 2;
+      addLine(svg, xRight, y1, xMid, y1);
+      addLine(svg, xRight, y2, xMid, y2);
+      addLine(svg, xMid,   y1, xMid, y2);
+      addLine(svg, xMid,   yt, xLeft, yt);
+    });
+  }
+}
+
+// ── Data from server ─────────────────────────────────────────────────────────
+const ACTUAL_TEAMS  = {{ actual_teams_json | safe }};
+const FLAGS         = {{ flags_json | safe }};
+const bracketOpen   = {{ 'true' if bracket_any_open else 'false' }};
+const hasWildcard   = {{ 'true' if user.has_wildcard and not user.wildcard_used else 'false' }};
+
+// ── Bracket cascade tree ─────────────────────────────────────────────────────
+// BRACKET_TREE[round][match_id] = [nextRound, nextMatchId, slot (0=team1, 1=team2)]
+const BRACKET_TREE = { r32: {}, r16: {}, qf: {}, sf: {} };
+for (let i = 1; i <= 16; i++) BRACKET_TREE.r32[i] = ['r16', Math.ceil(i / 2), (i - 1) % 2];
+for (let i = 1;  i <= 8; i++) BRACKET_TREE.r16[i] = ['qf',  Math.ceil(i / 2), (i - 1) % 2];
+for (let i = 1;  i <= 4; i++) BRACKET_TREE.qf[i]  = ['sf',  Math.ceil(i / 2), (i - 1) % 2];
+BRACKET_TREE.sf[1] = ['final', 1, 0];
+BRACKET_TREE.sf[2] = ['final', 1, 1];
+// SF losers feed the 3rd-place match
+const SF_TO_TP = { 1: ['tp', 1, 0], 2: ['tp', 1, 1] };
+
+// ── State: all current picks ─────────────────────────────────────────────────
+const myPicks = {};  // key: `${round}_${matchId}` → team name
+(function initPicks() {
+  const server = {{ picks_json | safe }};
+  for (const [round, picks] of Object.entries(server)) {
+    for (const [mid, team] of Object.entries(picks)) {
+      myPicks[`${round}_${mid}`] = team;
+    }
+  }
+})();
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function getCard(round, match) {
+  return document.querySelector(`.b-card[data-round="${round}"][data-match="${match}"]`);
+}
+function getTeamEls(round, match) {
+  const c = getCard(round, match);
+  return c ? [...c.querySelectorAll('.b-team')] : [];
+}
+
+// Return the actual team name for a slot from DB data (or '' if unknown)
+function actualTeam(round, match, slot) {
+  const r = ACTUAL_TEAMS[round];
+  if (!r) return '';
+  const m = r[match];
+  if (!m) return '';
+  return slot === 0 ? m.t1 : m.t2;
+}
+
+// Update a single team slot in a cascade card (only if not actual)
+function setCascadeSlot(round, match, slot, team) {
+  const els = getTeamEls(round, match);
+  const el = els[slot];
+  if (!el) return;
+  if (el.dataset.actual === '1') return;  // never override real teams
+
+  el.dataset.team = team || '';
+  el.querySelector('.b-flag').textContent = team ? (FLAGS[team] || '🏳️') : '?';
+  el.querySelector('.b-name').textContent = team || 'Por determinar';
+
+  el.classList.toggle('b-tbd', !team);
+  el.classList.toggle('clickable', !!(team && bracketOpen));
+  el.onclick = (team && bracketOpen) ? () => pickTeam(el) : null;
+
+  // Apply pick styling
+  const card = el.closest('.b-card');
+  const pickKey = `${round}_${match}`;
+  const currentPick = myPicks[pickKey];
+
+  el.classList.remove('b-picked', 'b-won', 'b-lost');
+  el.querySelector('.bi-bookmark-fill')?.remove();
+
+  if (currentPick === team && team && !actualTeam(round, match, 0) && !actualTeam(round, match, 1)) {
+    el.classList.add('b-picked');
+    const icon = document.createElement('i');
+    icon.className = 'bi bi-bookmark-fill b-icon text-warning';
+    el.appendChild(icon);
+  }
+}
+
+// Recompute all cascade slots top-down and apply
+function applyAllCascades() {
+  const rounds = ['r32', 'r16', 'qf', 'sf'];
+  for (const round of rounds) {
+    const tree = BRACKET_TREE[round];
+    if (!tree) continue;
+    for (const [matchIdStr, [nextRound, nextMatch, slot]] of Object.entries(tree)) {
+      const matchId = parseInt(matchIdStr);
+      const pick = myPicks[`${round}_${matchId}`];
+      setCascadeSlot(nextRound, nextMatch, slot, pick || '');
+    }
+  }
+
+  // SF losers → 3rd place
+  for (const [sfNum, [tpRound, tpMatch, tpSlot]] of Object.entries(SF_TO_TP)) {
+    const sfPick = myPicks[`sf_${sfNum}`];
+    if (!sfPick) {
+      setCascadeSlot(tpRound, tpMatch, tpSlot, '');
+      continue;
+    }
+    // Find the OTHER team in the SF card
+    const sfEls = getTeamEls('sf', parseInt(sfNum));
+    const loser = sfEls.map(e => e.dataset.team).find(t => t && t !== sfPick);
+    setCascadeSlot(tpRound, tpMatch, tpSlot, loser || '');
+  }
+}
+
+// ── Cascade-clear stale downstream picks ────────────────────────────────────
+// When a pick at (round, match) changes, any downstream picks that matched the
+// OLD team are now invalid (the team may no longer appear in that slot).
+function clearDownstreamIfStale(round, match, oldTeam) {
+  if (!oldTeam) return;
+  const treeEntry = (BRACKET_TREE[round] || {})[match];
+  if (!treeEntry) return;
+  const [nextRound, nextMatch] = treeEntry;
+  const nextKey = `${nextRound}_${nextMatch}`;
+  if (myPicks[nextKey] !== oldTeam) return;
+
+  delete myPicks[nextKey];
+  const card = getCard(nextRound, nextMatch);
+  if (card) {
+    card.querySelectorAll('.b-team').forEach(t => {
+      t.classList.remove('b-picked');
+      t.querySelectorAll('.bi-bookmark-fill').forEach(i => i.remove());
+    });
+    card.classList.remove('has-pick');
+  }
+  fetch('{{ url_for("clear_knockout_pick") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ round_id: nextRound, match_id: nextMatch }),
+  });
+  clearDownstreamIfStale(nextRound, nextMatch, oldTeam);
+}
+
+// ── Pick logic ───────────────────────────────────────────────────────────────
+let pendingPick = null;
+
+function pickTeam(el) {
+  const roundId = el.dataset.round;
+  const matchId = parseInt(el.dataset.match);
+  const team    = el.dataset.team;
+  if (!team) return;
+
+  // Unknown team name (e.g. entered with wrong capitalization in admin)
+  if (!FLAGS[team]) {
+    showToast(`"${team}" no está en la lista de equipos — corrige el nombre en el admin.`);
+    return;
+  }
+
+  // Deselect if already picked
+  if (el.classList.contains('b-picked')) {
+    clearPick(roundId, matchId, el);
+    return;
+  }
+
+  const phaseMap = {{ phase | tojson }};
+  const isOpen   = phaseMap[roundId + '_open'] || phaseMap['bracket_open'];
+
+  if (!isOpen) {
+    if (!hasWildcard) return;
+    pendingPick = { roundId, matchId, team, el, useWildcard: true };
+    document.getElementById('wildcard-team-name').textContent = team;
+    new bootstrap.Modal(document.getElementById('wildcardModal')).show();
+    return;
+  }
+  sendPick(roundId, matchId, team, el, false);
+}
+
+document.getElementById('confirm-wildcard')?.addEventListener('click', function () {
+  bootstrap.Modal.getInstance(document.getElementById('wildcardModal')).hide();
+  if (pendingPick) {
+    sendPick(pendingPick.roundId, pendingPick.matchId, pendingPick.team, pendingPick.el, true);
+    pendingPick = null;
+  }
+});
+
+async function sendPick(roundId, matchId, team, el, useWildcard) {
+  try {
+    const res = await fetch('{{ url_for("pick_knockout") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ round_id: roundId, match_id: matchId, team, wildcard: useWildcard }),
+    });
+    const data = await res.json();
+    if (!data.ok) { showToast(data.msg); return; }
+
+    const oldPick = myPicks[`${roundId}_${matchId}`];
+    myPicks[`${roundId}_${matchId}`] = team;
+    clearDownstreamIfStale(roundId, matchId, oldPick);
+
+    const card = el.closest('.b-card');
+    card.querySelectorAll('.b-team').forEach(t => {
+      t.classList.remove('b-picked');
+      t.querySelectorAll('.bi-bookmark-fill').forEach(i => i.remove());
+    });
+    el.classList.add('b-picked');
+    const icon = document.createElement('i');
+    icon.className = 'bi bi-bookmark-fill b-icon text-warning';
+    el.appendChild(icon);
+    card.classList.add('has-pick');
+
+    applyAllCascades();
+    drawConnectors();
+
+    if (useWildcard) {
+      document.querySelector('.alert-warning')?.remove();
+      showToast('⭐ ' + data.msg);
+    } else {
+      showToast(data.msg);
+    }
+  } catch { showToast('Error de conexión.'); }
+}
+
+async function clearPick(roundId, matchId, el) {
+  try {
+    const res = await fetch('{{ url_for("clear_knockout_pick") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ round_id: roundId, match_id: matchId }),
+    });
+    const data = await res.json();
+    if (!data.ok) { showToast(data.msg || 'No se pudo borrar.'); return; }
+
+    const oldPick = myPicks[`${roundId}_${matchId}`];
+    delete myPicks[`${roundId}_${matchId}`];
+    clearDownstreamIfStale(roundId, matchId, oldPick);
+
+    const card = el.closest('.b-card');
+    card.querySelectorAll('.b-team').forEach(t => {
+      t.classList.remove('b-picked');
+      t.querySelectorAll('.bi-bookmark-fill').forEach(i => i.remove());
+    });
+    card.classList.remove('has-pick');
+
+    applyAllCascades();
+    drawConnectors();
+    showToast('Predicción borrada.');
+  } catch { showToast('Error de conexión.'); }
+}
+
+async function resetAllPicks() {
+  if (!confirm('¿Seguro que quieres borrar TODAS tus predicciones de eliminatorias?')) return;
+  try {
+    const res = await fetch('{{ url_for("reset_knockout_picks") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await res.json();
+    if (!data.ok) { showToast('Error al reiniciar.'); return; }
+
+    // Clear local state
+    for (const k of Object.keys(myPicks)) delete myPicks[k];
+
+    // Remove all pick indicators from DOM
+    document.querySelectorAll('.b-team').forEach(t => {
+      t.classList.remove('b-picked');
+      t.querySelectorAll('.bi-bookmark-fill').forEach(i => i.remove());
+    });
+    document.querySelectorAll('.b-card').forEach(c => c.classList.remove('has-pick'));
+
+    applyAllCascades();
+    drawConnectors();
+    showToast('Bracket reiniciado.');
+  } catch { showToast('Error de conexión.'); }
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  applyAllCascades();
+  drawConnectors();
+});
+window.addEventListener('resize', drawConnectors);
+</script>
+{% endblock %}

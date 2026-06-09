@@ -1,0 +1,759 @@
+{% extends 'base.html' %}
+{% block title %}Admin – Porra Mundial 2026{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="fw-bold mb-0"><i class="bi bi-gear-fill text-warning"></i> Panel de Administración</h2>
+  <a href="{{ url_for('admin_logout') }}" class="btn btn-outline-danger btn-sm">Cerrar sesión admin</a>
+</div>
+
+<ul class="nav nav-tabs mb-4" id="adminTabs">
+  <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-phases">Fases</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-groups">Resultados Grupos</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-bracket">Bracket Eliminatorias</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-specials"><i class="bi bi-stars text-warning"></i> Especiales</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-teams">Equipos/Grupos</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-players">Jugadores</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-streak"><span class="text-warning">🔥</span> Racha</a></li>
+</ul>
+
+<div class="tab-content">
+
+  <!-- ===== FASES ===== -->
+  <div class="tab-pane fade show active" id="tab-phases">
+    <div class="row g-3 mb-4">
+      {% for key, cfg in phase_config.items() %}
+      <div class="col-md-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body d-flex justify-content-between align-items-center">
+            <div>
+              <div class="fw-semibold">{{ cfg.label }}</div>
+              <small class="text-muted">{{ key }}</small>
+            </div>
+            <form method="POST" action="{{ url_for('admin_toggle_phase') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="key" value="{{ key }}">
+              <button type="submit" class="btn btn-sm {% if phase[key] %}btn-success{% else %}btn-outline-secondary{% endif %}">
+                {% if phase[key] %}<i class="bi bi-unlock-fill"></i> ABIERTO{% else %}<i class="bi bi-lock-fill"></i> CERRADO{% endif %}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header fw-bold"><i class="bi bi-calculator"></i> Recalcular puntuaciones</div>
+          <div class="card-body">
+            <p class="text-muted small mb-3">Recalcula todos los puntos y envía el ranking actualizado. El campo de etiqueta se guarda en el historial de cada jugador.</p>
+            <form method="POST" action="{{ url_for('admin_recalculate') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <div class="input-group mb-2">
+                <input type="text" name="label" class="form-control form-control-sm"
+                       placeholder="Etiqueta snapshot (ej: Grupos, Octavos…)" maxlength="60">
+                <button type="submit" class="btn btn-danger fw-bold">
+                  <i class="bi bi-lightning-fill"></i> Recalcular
+                </button>
+              </div>
+              <div class="form-text text-muted">Déjalo vacío para autodetectarlo.</div>
+            </form>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header fw-bold"><i class="bi bi-star-fill text-warning"></i> Comodín</div>
+          <div class="card-body">
+            <p class="text-muted small mb-3">Otorga el comodín al jugador con más puntos en grupos. Hazlo después de recalcular puntuaciones.</p>
+            <form method="POST" action="{{ url_for('admin_award_wildcard') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-warning fw-bold text-dark">
+                <i class="bi bi-star-fill"></i> Otorgar comodín al líder de grupos
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+      <div class="col-12">
+        <div class="card border-info">
+          <div class="card-header fw-bold text-info"><i class="bi bi-cloud-download"></i> Sincronización automática con API</div>
+          <div class="card-body">
+            <p class="text-muted small mb-2">
+              Descarga clasificaciones de grupos <strong>y partidos de eliminatorias</strong> desde
+              <strong>football-data.org</strong>. El servidor sincroniza grupos cada hora — esto fuerza sincronización inmediata.
+            </p>
+            {% if last_api_sync %}
+            <p class="text-muted small mb-2"><i class="bi bi-clock"></i> Último sync: <strong>{{ last_api_sync }}</strong></p>
+            {% endif %}
+            <div class="d-flex gap-2 flex-wrap">
+              <form method="POST" action="{{ url_for('admin_sync_api') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-info fw-bold text-dark">
+                  <i class="bi bi-arrow-repeat"></i> Sync Grupos
+                </button>
+              </form>
+              <form method="POST" action="{{ url_for('admin_sync_bracket') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-outline-info fw-bold">
+                  <i class="bi bi-diagram-3"></i> Sync Bracket
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== RESULTADOS GRUPOS ===== -->
+  <div class="tab-pane fade" id="tab-groups">
+    <div class="alert alert-info">
+      <i class="bi bi-info-circle"></i> Introduce el orden final de cada grupo (1º, 2º, 3º, 4º) según los resultados reales del Mundial.
+      Luego pulsa <strong>Recalcular</strong> en la pestaña Fases.
+    </div>
+    <div class="row g-3" id="group-results-grid">
+      {% for group_name, teams in groups.items() %}
+      <div class="col-md-6 col-lg-4">
+        <div class="card">
+          <div class="card-header fw-bold">Grupo {{ group_name }}</div>
+          <div class="card-body">
+            {% set saved = actual_standings.get(group_name, {}) %}
+            {% for pos in [1,2,3,4] %}
+            <div class="mb-2">
+              <label class="form-label small text-muted mb-1">{{ pos }}º lugar</label>
+              <select class="form-select form-select-sm group-result-select"
+                      data-group="{{ group_name }}" data-pos="{{ pos }}">
+                <option value="">— Seleccionar —</option>
+                {% for team in teams %}
+                <option value="{{ team }}" {% if saved.get(pos) == team %}selected{% endif %}>{{ team }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            {% endfor %}
+            <button class="btn btn-sm btn-primary w-100 mt-2" onclick="saveGroupResult('{{ group_name }}')">
+              <i class="bi bi-floppy"></i> Guardar Grupo {{ group_name }}
+            </button>
+            <div id="group-{{ group_name }}-status" class="mt-1 small text-center"></div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ===== BRACKET ELIMINATORIAS ===== -->
+  <div class="tab-pane fade" id="tab-bracket">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+      <div class="alert alert-info mb-0 flex-grow-1">
+        <i class="bi bi-info-circle"></i> Configura los partidos (equipos) y después introduce los resultados a medida que se juegan.
+      </div>
+      <div class="d-flex gap-2 flex-wrap">
+        <button class="btn btn-outline-success btn-sm" onclick="buildBracket()" title="Genera los partidos de R32 automáticamente desde las clasificaciones de grupos ya guardadas">
+          <i class="bi bi-diagram-3-fill"></i> Generar R32 desde grupos
+        </button>
+        <button class="btn btn-outline-danger btn-sm" onclick="resetBracket()">
+          <i class="bi bi-trash3"></i> Vaciar bracket
+        </button>
+      </div>
+    </div>
+
+    {% for r in rounds %}
+    <div class="card mb-3">
+      <div class="card-header fw-bold d-flex justify-content-between">
+        <span>{{ r.name }}</span>
+        <span class="badge {% if phase[r.id ~ '_open'] %}bg-success{% else %}bg-secondary{% endif %}">
+          {% if phase[r.id ~ '_open'] %}ABIERTO{% else %}CERRADO{% endif %}
+        </span>
+      </div>
+      <div class="card-body">
+        <div class="row g-2">
+          {% for i in range(1, r.matches + 1) %}
+          {% set match = matches_by_round.get(r.id, [])|selectattr('match_id', 'eq', i)|first %}
+          <div class="col-md-6">
+            <div class="border rounded p-2 mb-1">
+              <div class="fw-semibold small text-muted mb-2">Partido {{ i }}</div>
+              <div class="row g-1 mb-2">
+                <div class="col-5">
+                  <input type="text" class="form-control form-control-sm"
+                         id="t1-{{ r.id }}-{{ i }}" placeholder="Equipo 1"
+                         value="{{ match.team1 if match else '' }}">
+                </div>
+                <div class="col-2 text-center d-flex align-items-center justify-content-center text-muted fw-bold">vs</div>
+                <div class="col-5">
+                  <input type="text" class="form-control form-control-sm"
+                         id="t2-{{ r.id }}-{{ i }}" placeholder="Equipo 2"
+                         value="{{ match.team2 if match else '' }}">
+                </div>
+              </div>
+              <div class="d-flex gap-1">
+                <button class="btn btn-sm btn-outline-primary flex-grow-1"
+                        onclick="setupMatch('{{ r.id }}', {{ i }})">
+                  <i class="bi bi-save"></i> Configurar
+                </button>
+                {% if match and match.team1 %}
+                <select class="form-select form-select-sm flex-grow-1" id="winner-{{ r.id }}-{{ i }}">
+                  <option value="">Ganador...</option>
+                  <option value="{{ match.team1 }}" {% if match.winner == match.team1 %}selected{% endif %}>{{ match.team1 }}</option>
+                  <option value="{{ match.team2 }}" {% if match.winner == match.team2 %}selected{% endif %}>{{ match.team2 }}</option>
+                </select>
+                <button class="btn btn-sm btn-success" onclick="setWinner('{{ r.id }}', {{ i }})">
+                  <i class="bi bi-check-lg"></i>
+                </button>
+                {% endif %}
+              </div>
+              {% if match and match.winner %}
+              <div class="mt-1 text-success small"><i class="bi bi-trophy"></i> Ganador: <strong>{{ match.winner }}</strong></div>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- ===== ESPECIALES ===== -->
+  <div class="tab-pane fade" id="tab-specials">
+    <div class="alert alert-info">
+      <i class="bi bi-info-circle"></i> Introduce el resultado real de cada predicción especial. Después pulsa <strong>Recalcular</strong> en la pestaña Fases.
+    </div>
+    <div class="row g-3">
+      {% for cat in special_categories %}
+      {% set saved_result = special_results.get(cat.id, '') %}
+      <div class="col-md-6 col-lg-4">
+        <div class="card">
+          <div class="card-header d-flex align-items-center gap-2 py-2">
+            <i class="bi {{ cat.icon }} text-warning"></i>
+            <span class="fw-semibold flex-grow-1">{{ cat.label }}</span>
+          </div>
+          <div class="card-body">
+            {% if cat.type == 'team' %}
+            <select class="form-select form-select-sm" id="special-{{ cat.id }}">
+              <option value="">— Resultado real —</option>
+              {% for team in all_teams %}
+              <option value="{{ team }}" {% if saved_result == team %}selected{% endif %}>{{ team }}</option>
+              {% endfor %}
+            </select>
+            {% else %}
+            <input type="text" class="form-control form-control-sm" id="special-{{ cat.id }}"
+                   placeholder="Nombre del jugador…" value="{{ saved_result }}">
+            {% endif %}
+            <div class="d-flex gap-2 mt-2">
+              <button class="btn btn-sm btn-primary flex-grow-1"
+                      onclick="saveSpecialResult('{{ cat.id }}')">
+                <i class="bi bi-floppy"></i> Guardar
+              </button>
+            </div>
+            <div id="special-{{ cat.id }}-status" class="mt-1 small text-center"></div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ===== EQUIPOS/GRUPOS ===== -->
+  <div class="tab-pane fade" id="tab-teams">
+    <div class="alert alert-warning">
+      <i class="bi bi-exclamation-triangle"></i>
+      <strong>Actualiza los grupos con los del sorteo real del Mundial 2026.</strong>
+      El sorteo se celebró el 5 de diciembre de 2025 en Miami.
+      <a href="https://www.fifa.com/es/tournaments/mens/worldcup/2026worldcup" target="_blank" class="alert-link">Ver en FIFA.com <i class="bi bi-box-arrow-up-right"></i></a>
+    </div>
+    <div class="card">
+      <div class="card-header fw-bold">Editor de Grupos (JSON)</div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('admin_update_groups') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="mb-3">
+            <label class="form-label text-muted small">
+              Formato: <code>{"A": ["Equipo1", "Equipo2", "Equipo3", "Equipo4"], "B": [...], ...}</code>
+              — 12 grupos (A-L), 4 equipos cada uno.
+            </label>
+            <textarea name="groups_json" class="form-control font-monospace" rows="20"
+                      style="font-size: 0.85rem;">{{ groups_json }}</textarea>
+          </div>
+          <button type="submit" class="btn btn-warning fw-bold">
+            <i class="bi bi-floppy"></i> Guardar configuración de grupos
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== JUGADORES ===== -->
+  <div class="tab-pane fade" id="tab-players">
+    <div class="card">
+      <div class="card-body p-0">
+        <table class="table table-dark table-hover mb-0">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Nombre</th>
+              <th>IP</th>
+              <th class="text-center">Grupos</th>
+              <th class="text-center">Elim.</th>
+              <th class="text-center">Total</th>
+              <th class="text-center">Comodín</th>
+              <th>Código</th>
+              <th>Discord</th>
+              <th>Registro</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for user, score in users %}
+            {% set dl = discord_links.get(user.id) %}
+            <tr id="user-row-{{ user.id }}">
+              <td class="text-muted">{{ loop.index }}</td>
+              <td class="fw-semibold">
+                <span id="uname-{{ user.id }}">{{ user.name }}</span>
+                <button class="btn btn-link btn-sm p-0 ms-1 text-secondary" title="Renombrar"
+                        onclick="startRename({{ user.id }}, '{{ user.name|e }}')">
+                  <i class="bi bi-pencil-fill" style="font-size:.75rem"></i>
+                </button>
+              </td>
+              <td class="text-muted small" title="{{ user.ip }}">
+                <span class="font-monospace" style="font-size:.65rem">{{ user.ip[:12] if user.ip else '—' }}…</span>
+              </td>
+              <td class="text-center">{{ score.group_points if score else 0 }}</td>
+              <td class="text-center">{{ score.knockout_points if score else 0 }}</td>
+              <td class="text-center fw-bold">{{ score.total_points if score else 0 }}</td>
+              <td class="text-center">
+                {% if user.has_wildcard and not user.wildcard_used %}
+                  <span class="badge bg-warning text-dark"><i class="bi bi-star-fill"></i> Disponible</span>
+                  <button class="btn btn-link btn-sm p-0 ms-1 text-danger" title="Quitar comodín"
+                          onclick="revokeWildcard({{ user.id }}, '{{ user.name|e }}')">
+                    <i class="bi bi-x-circle-fill" style="font-size:.75rem"></i>
+                  </button>
+                {% elif user.wildcard_used %}
+                  <span class="badge bg-secondary">Usado</span>
+                  <button class="btn btn-link btn-sm p-0 ms-1 text-danger" title="Quitar comodín"
+                          onclick="revokeWildcard({{ user.id }}, '{{ user.name|e }}')">
+                    <i class="bi bi-x-circle-fill" style="font-size:.75rem"></i>
+                  </button>
+                {% else %}—{% endif %}
+              </td>
+              <td>
+                <code class="text-warning" style="font-size:.75rem;letter-spacing:.05em">{{ user.recovery_code or '—' }}</code>
+              </td>
+              <td id="discord-cell-{{ user.id }}" style="min-width:160px">
+                {% if dl %}
+                  <span class="badge bg-indigo text-white" style="background:#5865F2;font-size:.7rem">
+                    <i class="bi bi-discord"></i> {{ dl.discord_name or dl.discord_id }}
+                  </span>
+                  <button class="btn btn-link btn-sm p-0 ms-1 text-secondary" title="Editar Discord ID"
+                          onclick="editDiscord({{ user.id }}, '{{ dl.discord_id }}')">
+                    <i class="bi bi-pencil-fill" style="font-size:.7rem"></i>
+                  </button>
+                  <button class="btn btn-link btn-sm p-0 text-danger" title="Desvincular Discord"
+                          onclick="unlinkDiscord({{ user.id }}, '{{ user.name|e }}')">
+                    <i class="bi bi-x-circle-fill" style="font-size:.7rem"></i>
+                  </button>
+                {% else %}
+                  <button class="btn btn-link btn-sm p-0 text-secondary" style="font-size:.75rem"
+                          onclick="editDiscord({{ user.id }}, '')">
+                    <i class="bi bi-plus-circle"></i> Vincular
+                  </button>
+                {% endif %}
+              </td>
+              <td class="text-muted small">{{ user.created_at.strftime('%d/%m %H:%M') }}</td>
+              <td>
+                <button class="btn btn-link btn-sm p-0 text-danger" title="Eliminar usuario"
+                        onclick="deleteUser({{ user.id }}, '{{ user.name|e }}')">
+                  <i class="bi bi-trash-fill" style="font-size:.75rem"></i>
+                </button>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="11" class="text-center text-muted py-4">No hay jugadores registrados.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== RACHA DEL DÍA ===== -->
+  <div class="tab-pane fade" id="tab-streak">
+    <div class="row g-3">
+
+      <!-- Set today's match -->
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header fw-bold"><span class="text-warning">🔥</span> Partido del día</div>
+          <div class="card-body">
+            <p class="text-muted small mb-3">Configura el partido sobre el que los usuarios votarán hoy. Usa el mismo <code>date</code> si quieres actualizar los equipos.</p>
+            <div class="mb-2">
+              <label class="form-label small text-muted mb-1">Fecha (YYYY-MM-DD)</label>
+              <input type="date" class="form-control form-control-sm" id="streak-date">
+            </div>
+            <div class="mb-2">
+              <label class="form-label small text-muted mb-1">Equipo local</label>
+              <input type="text" class="form-control form-control-sm" id="streak-home"
+                     placeholder="Ej: España" list="streak-teams-list">
+            </div>
+            <div class="mb-2">
+              <label class="form-label small text-muted mb-1">Equipo visitante</label>
+              <input type="text" class="form-control form-control-sm" id="streak-away"
+                     placeholder="Ej: Argentina" list="streak-teams-list">
+            </div>
+            <datalist id="streak-teams-list">
+              {% for team in all_teams %}
+              <option value="{{ team }}">
+              {% endfor %}
+            </datalist>
+            <div class="d-flex gap-2 mt-2">
+              <button class="btn btn-warning btn-sm fw-bold flex-grow-1" onclick="setStreakMatch()">
+                <i class="bi bi-floppy"></i> Guardar
+              </button>
+              <button class="btn btn-outline-info btn-sm" onclick="nextFromApi()" title="Rellenar con el próximo partido de la API">
+                <i class="bi bi-cloud-download"></i> Siguiente partido
+              </button>
+            </div>
+            <button class="btn btn-primary btn-sm w-100 mt-2" onclick="notifyDiscordNow()">
+              <i class="bi bi-discord"></i> Enviar a Discord ahora
+            </button>
+            <button class="btn btn-secondary btn-sm w-100 mt-2" onclick="sendRecoveryDms()">
+              <i class="bi bi-key"></i> Enviar claves de recuperación por DM
+            </button>
+            <div id="streak-match-status" class="mt-2 small text-center"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Enter result -->
+      <div class="col-md-6">
+        <div class="card" id="streak-result-card">
+          <div class="card-header fw-bold">Resultado</div>
+          <div class="card-body">
+            <div id="streak-current-info" class="mb-3 text-muted small">Cargando partido configurado…</div>
+            <div class="d-flex flex-column gap-2" id="streak-result-btns">
+              <button class="btn btn-outline-success btn-sm" onclick="setStreakResult('home')" id="btn-streak-home" disabled>
+                <i class="bi bi-house-fill"></i> Gana el local
+              </button>
+              <button class="btn btn-outline-secondary btn-sm" onclick="setStreakResult('draw')" id="btn-streak-draw" disabled>
+                🤝 Empate
+              </button>
+              <button class="btn btn-outline-primary btn-sm" onclick="setStreakResult('away')" id="btn-streak-away" disabled>
+                <i class="bi bi-airplane-fill"></i> Gana el visitante
+              </button>
+            </div>
+            <div id="streak-result-status" class="mt-2 small text-center"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function saveGroupResult(groupName) {
+  const selects = document.querySelectorAll(`.group-result-select[data-group="${groupName}"]`);
+  const teams = [...selects].map(s => s.value);
+  if (teams.some(t => !t)) {
+    alert('Selecciona todos los equipos del grupo ' + groupName);
+    return;
+  }
+  const statusEl = document.getElementById(`group-${groupName}-status`);
+  try {
+    const res = await fetch('{{ url_for("admin_group_results") }}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({group: groupName, teams: teams}),
+    });
+    const data = await res.json();
+    statusEl.innerHTML = data.ok
+      ? '<span class="text-success">✓ Guardado</span>'
+      : '<span class="text-danger">Error: ' + data.msg + '</span>';
+  } catch (e) {
+    statusEl.innerHTML = '<span class="text-danger">Error de conexión</span>';
+  }
+  setTimeout(() => statusEl.innerHTML = '', 3000);
+}
+
+async function setupMatch(roundId, matchId) {
+  const t1 = document.getElementById(`t1-${roundId}-${matchId}`).value.trim();
+  const t2 = document.getElementById(`t2-${roundId}-${matchId}`).value.trim();
+  if (!t1 || !t2) { alert('Introduce ambos equipos.'); return; }
+  const res = await fetch('{{ url_for("admin_setup_match") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({round_id: roundId, match_id: matchId, team1: t1, team2: t2}),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    showToast('Partido configurado. Recarga la página para ver el selector de ganador.');
+  } else {
+    alert(data.msg);
+  }
+}
+
+async function saveSpecialResult(catId) {
+  const el = document.getElementById(`special-${catId}`);
+  const value = el.value.trim();
+  if (!value) { alert('Introduce el resultado.'); return; }
+  const statusEl = document.getElementById(`special-${catId}-status`);
+  try {
+    const res = await fetch('{{ url_for("admin_special_result") }}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({category: catId, value: value}),
+    });
+    const data = await res.json();
+    statusEl.innerHTML = data.ok
+      ? '<span class="text-success">✓ Guardado</span>'
+      : '<span class="text-danger">Error: ' + data.msg + '</span>';
+  } catch (e) {
+    statusEl.innerHTML = '<span class="text-danger">Error de conexión</span>';
+  }
+  setTimeout(() => statusEl.innerHTML = '', 3000);
+}
+
+async function revokeWildcard(userId, name) {
+  if (!confirm(`¿Quitar el comodín a "${name}"?`)) return;
+  const res = await fetch('{{ url_for("admin_revoke_wildcard") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id: userId}),
+  });
+  const data = await res.json();
+  if (data.ok) { showToast(data.msg); setTimeout(() => location.reload(), 800); }
+  else alert(data.msg);
+}
+
+async function deleteUser(userId, name) {
+  if (!confirm(`¿Eliminar a "${name}"? Se borrarán todas sus predicciones.`)) return;
+  const res = await fetch('{{ url_for("admin_delete_user") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id: userId}),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    document.getElementById(`user-row-${userId}`)?.remove();
+    showToast(data.msg);
+  } else {
+    alert(data.msg);
+  }
+}
+
+async function startRename(userId, currentName) {
+  const newName = prompt(`Nuevo nombre para "${currentName}":`, currentName);
+  if (!newName || newName.trim() === currentName) return;
+  const trimmed = newName.trim();
+  if (!trimmed || trimmed.length > 30) { alert('El nombre debe tener entre 1 y 30 caracteres.'); return; }
+  const res = await fetch('{{ url_for("admin_rename_user") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id: userId, name: trimmed}),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    document.getElementById(`uname-${userId}`).textContent = trimmed;
+    showToast(data.msg);
+  } else {
+    alert(data.msg);
+  }
+}
+
+async function setWinner(roundId, matchId) {
+  const winner = document.getElementById(`winner-${roundId}-${matchId}`)?.value;
+  if (!winner) { alert('Selecciona el ganador.'); return; }
+  const res = await fetch('{{ url_for("admin_match_result") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({round_id: roundId, match_id: matchId, winner: winner}),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    showToast('Resultado guardado. ¡Recalcula las puntuaciones!');
+  } else {
+    alert(data.msg);
+  }
+}
+
+async function buildBracket() {
+  if (!confirm('¿Generar los partidos de Ronda de 32 automáticamente desde las clasificaciones actuales?\nLos partidos con resultado ya registrado no se modificarán.')) return;
+  const res = await fetch('{{ url_for("admin_build_bracket") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+  });
+  const data = await res.json();
+  if (data.ok) {
+    showToast(data.msg);
+    setTimeout(() => location.reload(), 900);
+  } else {
+    alert(data.msg || 'Error al generar el bracket.');
+  }
+}
+
+async function resetBracket() {
+  if (!confirm('¿Borrar TODOS los partidos del bracket (equipos y resultados)?\nLas predicciones de los usuarios se conservan.')) return;
+  const res = await fetch('{{ url_for("admin_reset_bracket") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+  });
+  const data = await res.json();
+  if (data.ok) {
+    showToast('Bracket vaciado.');
+    setTimeout(() => location.reload(), 800);
+  } else {
+    alert(data.msg || 'Error al vaciar el bracket.');
+  }
+}
+
+// ── Racha ────────────────────────────────────────────────────────────────────
+async function loadStreakAdmin() {
+  try {
+    const res  = await fetch('/api/streak');
+    const data = await res.json();
+    const infoEl = document.getElementById('streak-current-info');
+    if (!data.match) {
+      infoEl.textContent = 'No hay partido configurado todavía.';
+      return;
+    }
+    const m = data.match;
+    const resultLabel = { home: m.home, draw: 'Empate', away: m.away };
+    const resultText  = m.result ? `✅ Resultado: ${resultLabel[m.result]}` : '⏳ Sin resultado todavía.';
+    infoEl.innerHTML = `<strong>${m.home}</strong> vs <strong>${m.away}</strong> (${m.date})<br>${resultText}`;
+
+    // Enable result buttons and label them
+    document.getElementById('btn-streak-home').textContent = `🏠 Gana ${m.home}`;
+    document.getElementById('btn-streak-away').textContent = `✈️ Gana ${m.away}`;
+    ['btn-streak-home', 'btn-streak-draw', 'btn-streak-away'].forEach(id => {
+      document.getElementById(id).disabled = !!m.result;
+    });
+
+    // Pre-fill the set-match form
+    document.getElementById('streak-date').value  = m.date;
+    document.getElementById('streak-home').value  = m.home;
+    document.getElementById('streak-away').value  = m.away;
+  } catch (e) {
+    document.getElementById('streak-current-info').textContent = 'Error al cargar la racha.';
+  }
+}
+
+async function nextFromApi() {
+  const statusEl = document.getElementById('streak-match-status');
+  statusEl.innerHTML = '<span class="text-info">Consultando API…</span>';
+  const res = await fetch('/admin/streak/next-from-api', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+  });
+  const data = await res.json();
+  if (data.ok) {
+    const m = data.match;
+    document.getElementById('streak-date').value = m.date;
+    document.getElementById('streak-home').value = m.home;
+    document.getElementById('streak-away').value = m.away;
+    statusEl.innerHTML = `<span class="text-success">✓ ${m.home} vs ${m.away} (${m.date})</span>`;
+  } else {
+    statusEl.innerHTML = `<span class="text-danger">${data.msg}</span>`;
+  }
+  setTimeout(() => statusEl.innerHTML = '', 4000);
+}
+
+async function sendRecoveryDms() {
+  const statusEl = document.getElementById('streak-match-status');
+  const res = await fetch('/admin/send-recovery-dms', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+  });
+  const data = await res.json();
+  statusEl.innerHTML = data.ok
+    ? '<span class="text-success">✓ El bot enviará las claves por DM en breve</span>'
+    : `<span class="text-danger">${data.msg || 'Error'}</span>`;
+  setTimeout(() => statusEl.innerHTML = '', 5000);
+}
+
+async function notifyDiscordNow() {
+  const statusEl = document.getElementById('streak-match-status');
+  const res = await fetch('/admin/streak/notify-now', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+  });
+  const data = await res.json();
+  statusEl.innerHTML = data.ok
+    ? '<span class="text-success">✓ Notificación enviada — el bot publicará en segundos</span>'
+    : `<span class="text-danger">${data.msg}</span>`;
+  setTimeout(() => statusEl.innerHTML = '', 4000);
+}
+
+async function setStreakMatch() {
+  const date = document.getElementById('streak-date').value.trim();
+  const home = document.getElementById('streak-home').value.trim();
+  const away = document.getElementById('streak-away').value.trim();
+  const statusEl = document.getElementById('streak-match-status');
+  if (!date || !home || !away) { alert('Completa todos los campos.'); return; }
+  const res = await fetch('/admin/streak/set-match', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({date, home, away}),
+  });
+  const data = await res.json();
+  statusEl.innerHTML = data.ok
+    ? '<span class="text-success">✓ Guardado</span>'
+    : `<span class="text-danger">${data.msg}</span>`;
+  if (data.ok) loadStreakAdmin();
+  setTimeout(() => statusEl.innerHTML = '', 3000);
+}
+
+async function setStreakResult(result) {
+  const statusEl = document.getElementById('streak-result-status');
+  const labels = {home: 'local', draw: 'empate', away: 'visitante'};
+  if (!confirm(`¿Registrar resultado: ${labels[result]}? Esto actualizará las rachas de todos los jugadores.`)) return;
+  const res = await fetch('/admin/streak/set-result', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({result}),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    statusEl.innerHTML = `<span class="text-success">✓ ${data.updated} picks actualizados</span>`;
+    loadStreakAdmin();
+  } else {
+    statusEl.innerHTML = `<span class="text-danger">${data.msg}</span>`;
+  }
+  setTimeout(() => statusEl.innerHTML = '', 4000);
+}
+
+async function editDiscord(userId, currentId) {
+  const newId = prompt('Discord ID del usuario (número de 17-19 dígitos).\nDéjalo vacío para desvincular:', currentId);
+  if (newId === null) return;
+  await _setDiscordLink(userId, newId.trim());
+}
+
+async function unlinkDiscord(userId, name) {
+  if (!confirm(`¿Desvincular cuenta de Discord de "${name}"?`)) return;
+  await _setDiscordLink(userId, '');
+}
+
+async function _setDiscordLink(userId, discordId) {
+  const res = await fetch('/admin/link-discord', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id: userId, discord_id: discordId}),
+  });
+  const data = await res.json();
+  if (data.ok) { showToast(data.msg); setTimeout(() => location.reload(), 700); }
+  else alert(data.msg);
+}
+
+// Load streak info when the tab is opened
+document.querySelector('a[href="#tab-streak"]').addEventListener('shown.bs.tab', loadStreakAdmin);
+
+// Default date to today
+(function() {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('streak-date').value = today;
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,180 @@
+{% extends 'base.html' %}
+{% block title %}Predicciones Especiales – Porra Mundial 2026{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1"><i class="bi bi-stars text-warning"></i> Predicciones Especiales</h2>
+    <p class="text-muted mb-0">Apuestas extra · <strong>+500 pts</strong> por cada acierto</p>
+  </div>
+  <div class="text-end">
+    {% if phase.specials_open %}
+      <span class="badge bg-success fs-6 py-2 px-3"><i class="bi bi-unlock"></i> Abierto</span>
+      <div class="mt-1 small text-muted">Cierra el {{ deadline.deadline_str }}</div>
+    {% else %}
+      <span class="badge bg-secondary fs-6 py-2 px-3"><i class="bi bi-lock"></i> Cerrado</span>
+    {% endif %}
+  </div>
+</div>
+
+{% if phase.specials_open and deadline.seconds_left > 0 %}
+<div class="alert alert-warning d-flex align-items-center gap-3 mb-4">
+  <i class="bi bi-alarm fs-3"></i>
+  <div>
+    <strong>¡Cierran automáticamente el jueves 11 de junio a las 20:00!</strong><br>
+    <span class="text-muted">Tiempo restante: </span>
+    <strong id="countdown" class="text-warning fs-5">--:--:--</strong>
+  </div>
+</div>
+{% endif %}
+
+{% if not phase.specials_open %}
+<div class="alert alert-warning">
+  <i class="bi bi-lock-fill"></i> Las predicciones especiales están <strong>cerradas</strong>.
+  {% if existing %}Aquí están tus respuestas guardadas.{% else %}No guardaste ninguna predicción.{% endif %}
+</div>
+{% endif %}
+
+<div class="alert alert-info d-flex align-items-start gap-2 mb-4">
+  <i class="bi bi-info-circle-fill fs-5 flex-shrink-0 mt-1"></i>
+  <div>
+    <strong>Máximo {{ categories|length * 500 }} pts</strong> en esta sección.
+    Para los equipos usa el desplegable; para los jugadores escribe el nombre (sin importar tildes o mayúsculas).
+  </div>
+</div>
+
+<div class="row g-3 mb-4" id="specials-grid">
+  {% for cat in categories %}
+  {% set saved = existing.get(cat.id, '') %}
+  {% set result = results.get(cat.id) %}
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100 {% if result and saved and result.lower() == saved.lower() %}border-success{% elif result and saved %}border-danger{% endif %}">
+      <div class="card-header d-flex align-items-center gap-2 py-2">
+        <i class="bi {{ cat.icon }} text-warning"></i>
+        <span class="fw-semibold flex-grow-1">{{ cat.label }}</span>
+        <span class="badge bg-warning text-dark">+{{ cat.points }} pts</span>
+      </div>
+      <div class="card-body">
+        {% if cat.type == 'team' %}
+        <div class="input-group">
+          <span class="input-group-text fs-5" id="flag-{{ cat.id }}">
+            {{ flag(saved) if saved else '🏳️' }}
+          </span>
+          <select class="form-select special-input" data-cat="{{ cat.id }}"
+                  data-flagspan="flag-{{ cat.id }}"
+                  {% if not phase.specials_open %}disabled{% endif %}>
+            <option value="">— Seleccionar equipo —</option>
+            {% for team in all_teams %}
+            <option value="{{ team }}" data-flag="{{ flag(team) }}"
+                    {% if saved == team %}selected{% endif %}>{{ team }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% else %}
+        <input type="text" class="form-control special-input" data-cat="{{ cat.id }}"
+               placeholder="Nombre del jugador…"
+               value="{{ saved }}"
+               {% if not phase.specials_open %}disabled{% endif %}>
+        {% endif %}
+
+        {% if result %}
+        <div class="mt-2 small">
+          {% if saved and result.lower() == saved.lower() %}
+            <span class="text-success fw-bold"><i class="bi bi-trophy-fill"></i> ¡Acertaste! +500 pts</span>
+          {% elif saved %}
+            <span class="text-danger"><i class="bi bi-x-circle"></i> Tu pick: <strong>{{ saved }}</strong></span>
+          {% endif %}
+          <div class="text-muted mt-1">Resultado real: <strong>{{ result }}</strong></div>
+        </div>
+        {% elif saved %}
+        <div class="mt-2 small text-muted">
+          <i class="bi bi-bookmark-check"></i> Tu predicción: <strong>{{ saved }}</strong>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% if phase.specials_open %}
+<div class="d-flex gap-3 align-items-center">
+  <button class="btn btn-danger btn-lg fw-bold px-5" id="save-btn" onclick="saveSpecials()">
+    <i class="bi bi-floppy"></i> Guardar predicciones especiales
+  </button>
+  <span id="save-status" class="text-muted"></span>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('select.special-input[data-flagspan]').forEach(sel => {
+  sel.addEventListener('change', function() {
+    const span = document.getElementById(this.dataset.flagspan);
+    if (!span) return;
+    const opt = this.options[this.selectedIndex];
+    span.textContent = opt.dataset.flag || '🏳️';
+    if (window.parseTwemoji) parseTwemoji(span);
+  });
+});
+
+async function saveSpecials() {
+  const btn = document.getElementById('save-btn');
+  const status = document.getElementById('save-status');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...';
+
+  const data = {};
+  document.querySelectorAll('.special-input').forEach(el => {
+    if (el.value.trim()) data[el.dataset.cat] = el.value.trim();
+  });
+
+  try {
+    const res = await fetch('{{ url_for("predict_specials") }}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data),
+    });
+    const json = await res.json();
+    if (json.ok) {
+      status.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> ' + json.msg + '</span>';
+    } else {
+      status.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> ' + json.msg + '</span>';
+    }
+  } catch (err) {
+    status.innerHTML = '<span class="text-danger">Error de conexión.</span>';
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="bi bi-floppy"></i> Guardar predicciones especiales';
+  setTimeout(() => status.innerHTML = '', 4000);
+}
+
+// Cuenta atrás
+const secondsLeft = {{ deadline.seconds_left }};
+if (secondsLeft > 0) {
+  let remaining = secondsLeft;
+  const el = document.getElementById('countdown');
+  const tick = () => {
+    if (!el) return;
+    if (remaining <= 0) {
+      el.textContent = '¡Cerrado!';
+      showToast('⏰ ¡Las predicciones especiales han cerrado!');
+      document.getElementById('save-btn')?.remove();
+      return;
+    }
+    const d = Math.floor(remaining / 86400);
+    const h = Math.floor((remaining % 86400) / 3600);
+    const m = Math.floor((remaining % 3600) / 60);
+    const s = remaining % 60;
+    el.textContent = d > 0
+      ? `${d}d ${String(h).padStart(2,'0')}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`
+      : `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    remaining--;
+  };
+  tick();
+  setInterval(tick, 1000);
+}
+</script>
+{% endblock %}
