@@ -70,18 +70,20 @@ class TestOneUserPerSession:
             assert User.query.filter_by(name='Jugador1').count() == 1
             assert User.query.filter_by(name='Jugador2').count() == 1
 
-    def test_logout_clears_session(self, client, app):
-        """After logout, the same client is treated as a new visitor."""
+    def test_logout_keeps_persistent_cookie(self, client, app):
+        """After logout, /join restores the same account via the porra_uid cookie."""
         client.post('/join', data={'name': 'Antes'})
         client.get('/salir')
-        # Now the join page should be accessible again (not redirected)
+        # The persistent cookie survives logout, so /join bounces back home
         r = client.get('/join')
-        assert r.status_code == 200
+        assert r.status_code == 302
+        assert r.headers['Location'].endswith('/')
 
-    def test_logout_then_rejoin_creates_new_user(self, client, app):
+    def test_logout_then_rejoin_restores_same_user(self, client, app):
         client.post('/join', data={'name': 'PrimerNombre'})
         client.get('/salir')
         client.post('/join', data={'name': 'SegundoNombre'})
         with app.app_context():
-            # Both users exist in DB — old one persists, new one created
-            assert User.query.count() == 2
+            # The persistent cookie restores the original account — no new user
+            assert User.query.count() == 1
+            assert User.query.filter_by(name='PrimerNombre').count() == 1
