@@ -309,14 +309,25 @@ def apply_knockout_matches_to_db(knockout_data: dict) -> None:
     db.session.commit()
 
 
+_upcoming_cache: dict = {'data': None, 'ts': 0.0}
+_UPCOMING_CACHE_TTL = 60  # seconds; live matches refresh every minute
+
+
 def fetch_upcoming_matches(days_ahead: int = 14) -> list | None:
     """
     Return WC matches scheduled (or live) in the next `days_ahead` days.
     Each entry: {date, home, away, stage, group, status, score_home, score_away}
     Returns None if the API is unavailable.
+    Cached for _UPCOMING_CACHE_TTL seconds to avoid rate-limit hammering.
     """
+    import time
     if not API_KEY:
         return None
+
+    now_ts = time.monotonic()
+    cached = _upcoming_cache
+    if cached['data'] is not None and (now_ts - cached['ts']) < _UPCOMING_CACHE_TTL:
+        return cached['data']
 
     now = datetime.now(timezone.utc)
     date_from = (now - timedelta(days=4)).strftime('%Y-%m-%d')   # include recently finished
@@ -330,20 +341,22 @@ def fetch_upcoming_matches(days_ahead: int = 14) -> list | None:
             timeout=10,
         )
         if resp.status_code in (404, 400):
-            return None
+            return cached['data']  # return stale data rather than empty
         if resp.status_code == 429:
-            logger.warning('API rate limit hit for upcoming matches fetch')
-            return None
+            logger.warning('API rate limit hit for upcoming matches fetch — returning cached data')
+            return cached['data']
         resp.raise_for_status()
     except requests.RequestException as exc:
         logger.error('upcoming matches request failed: %s', exc)
-        return None
+        return cached['data']
 
     result = []
     for m in resp.json().get('matches', []):
         home_raw = ((m.get('homeTeam') or {}).get('name') or '')
         away_raw = ((m.get('awayTeam') or {}).get('name') or '')
         ft = (m.get('score') or {}).get('fullTime') or {}
+        score_h = ft.get('home')
+        score_a = ft.get('away')
         group_raw = m.get('group') or ''
         result.append({
             'date':       m['utcDate'],
@@ -352,10 +365,14 @@ def fetch_upcoming_matches(days_ahead: int = 14) -> list | None:
             'stage':      m.get('stage', ''),
             'group':      group_raw.replace('GROUP_', ''),
             'status':     m.get('status', ''),
-            'score_home': ft.get('home'),
-            'score_away': ft.get('away'),
+            'score_home': score_h,
+            'score_away': score_a,
         })
-    return result or None
+
+    if result:
+        _upcoming_cache['data'] = result
+        _upcoming_cache['ts']   = now_ts
+    return result or cached['data']
 
 
 def auto_update_streak() -> dict | None:
