@@ -388,6 +388,7 @@ def fetch_upcoming_matches(days_ahead: int = 14) -> list | None:
     for m in resp.json().get('matches', []):
         home_raw  = ((m.get('homeTeam') or {}).get('name') or '')
         away_raw  = ((m.get('awayTeam') or {}).get('name') or '')
+        status    = m.get('status', '')
         score_obj = m.get('score') or {}
         ft        = score_obj.get('fullTime') or {}
         ht        = score_obj.get('halfTime') or {}
@@ -397,7 +398,6 @@ def fetch_upcoming_matches(days_ahead: int = 14) -> list | None:
         if score_h is None and status == 'PAUSED':
             score_h = ht.get('home')
             score_a = ht.get('away')
-        status    = m.get('status', '')
         group_raw = m.get('group') or ''
         home      = _map_team(home_raw) if home_raw else ''
         away      = _map_team(away_raw) if away_raw else ''
