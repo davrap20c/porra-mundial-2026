@@ -310,15 +310,39 @@ def apply_knockout_matches_to_db(knockout_data: dict) -> None:
 
 
 _upcoming_cache: dict = {'data': None, 'ts': 0.0}
-_UPCOMING_CACHE_TTL = 60  # seconds; live matches refresh every minute
+
+_TTL_ACTIVE  = 60    # 1 min when a match is live or starting soon
+_TTL_IDLE    = 3600  # 1 hour when no action
+
+
+def _cache_ttl(data: list | None) -> int:
+    """60s if any match is live/paused or kicks off within 2h, else 1h."""
+    if not data:
+        return _TTL_IDLE
+    now = datetime.now(timezone.utc)
+    for m in data:
+        if m['status'] in ('IN_PLAY', 'PAUSED'):
+            return _TTL_ACTIVE
+        if m['status'] in ('TIMED', 'SCHEDULED'):
+            try:
+                dt = datetime.fromisoformat(m['date'].replace('Z', '+00:00'))
+                if abs((dt - now).total_seconds()) < 7200:
+                    return _TTL_ACTIVE
+            except Exception:
+                pass
+    return _TTL_IDLE
 
 
 def fetch_upcoming_matches(days_ahead: int = 14) -> list | None:
     """
     Return WC matches scheduled (or live) in the next `days_ahead` days.
     Each entry: {date, home, away, stage, group, status, score_home, score_away}
-    Returns None if the API is unavailable.
-    Cached for _UPCOMING_CACHE_TTL seconds to avoid rate-limit hammering.
+
+    Cache strategy:
+    - 1 min TTL while a match is live or kicks off within 2h
+    - 1 hour TTL otherwise
+    - On API error or rate-limit, returns stale cached data (score stays visible)
+    - Preserves last known score if the API reverts a match to TIMED mid-game
     """
     import time
     if not API_KEY:
@@ -326,11 +350,12 @@ def fetch_upcoming_matches(days_ahead: int = 14) -> list | None:
 
     now_ts = time.monotonic()
     cached = _upcoming_cache
-    if cached['data'] is not None and (now_ts - cached['ts']) < _UPCOMING_CACHE_TTL:
+    ttl = _cache_ttl(cached['data'])
+    if cached['data'] is not None and (now_ts - cached['ts']) < ttl:
         return cached['data']
 
     now = datetime.now(timezone.utc)
-    date_from = (now - timedelta(days=4)).strftime('%Y-%m-%d')   # include recently finished
+    date_from = (now - timedelta(days=4)).strftime('%Y-%m-%d')
     date_to   = (now + timedelta(days=days_ahead)).strftime('%Y-%m-%d')
 
     try:
@@ -340,31 +365,49 @@ def fetch_upcoming_matches(days_ahead: int = 14) -> list | None:
             headers={'X-Auth-Token': API_KEY},
             timeout=10,
         )
-        if resp.status_code in (404, 400):
-            return cached['data']  # return stale data rather than empty
+        if resp.status_code in (400, 404):
+            return cached['data']
         if resp.status_code == 429:
-            logger.warning('API rate limit hit for upcoming matches fetch — returning cached data')
+            logger.warning('API rate limit — returning cached upcoming matches')
             return cached['data']
         resp.raise_for_status()
     except requests.RequestException as exc:
         logger.error('upcoming matches request failed: %s', exc)
         return cached['data']
 
+    # Build lookup of old scores to preserve them if API regresses to TIMED
+    old_scores: dict = {}
+    if cached['data']:
+        for m in cached['data']:
+            if m['score_home'] is not None:
+                old_scores[(m['home'], m['away'], m['date'][:10])] = (
+                    m['score_home'], m['score_away'], m['status'])
+
     result = []
     for m in resp.json().get('matches', []):
-        home_raw = ((m.get('homeTeam') or {}).get('name') or '')
-        away_raw = ((m.get('awayTeam') or {}).get('name') or '')
-        ft = (m.get('score') or {}).get('fullTime') or {}
-        score_h = ft.get('home')
-        score_a = ft.get('away')
+        home_raw  = ((m.get('homeTeam') or {}).get('name') or '')
+        away_raw  = ((m.get('awayTeam') or {}).get('name') or '')
+        ft        = (m.get('score') or {}).get('fullTime') or {}
+        score_h   = ft.get('home')
+        score_a   = ft.get('away')
+        status    = m.get('status', '')
         group_raw = m.get('group') or ''
+        home      = _map_team(home_raw) if home_raw else ''
+        away      = _map_team(away_raw) if away_raw else ''
+
+        # Preserve score + status when API reverts to TIMED after showing a score
+        if score_h is None and status == 'TIMED':
+            key = (home, away, m['utcDate'][:10])
+            if key in old_scores:
+                score_h, score_a, status = old_scores[key]
+
         result.append({
             'date':       m['utcDate'],
-            'home':       _map_team(home_raw) if home_raw else '',
-            'away':       _map_team(away_raw) if away_raw else '',
+            'home':       home,
+            'away':       away,
             'stage':      m.get('stage', ''),
             'group':      group_raw.replace('GROUP_', ''),
-            'status':     m.get('status', ''),
+            'status':     status,
             'score_home': score_h,
             'score_away': score_a,
         })
