@@ -340,8 +340,11 @@ function renderMatch(m) {
     : `<span class="badge bg-dark border border-secondary" style="font-size:.55rem">${stageLabel}</span>`;
   const liveBadge = isLive ? '<span class="badge bg-danger" style="font-size:.6rem">EN VIVO</span>' : '';
   const doneBadge = isDone ? '<span class="badge bg-secondary opacity-50" style="font-size:.55rem">Finalizado</span>' : '';
+  const hasScore = m.score_home !== null && m.score_home !== undefined;
   const right = isDone || isLive
-    ? `<span class="fw-bold ${isDone ? 'text-muted' : 'text-white'}">${m.score_home ?? '?'} – ${m.score_away ?? '?'}</span>`
+    ? hasScore
+      ? `<span class="fw-bold ${isDone ? 'text-muted' : 'text-white'}">${m.score_home} – ${m.score_away}</span>`
+      : `<span class="text-muted small">${isDone ? 'Fin.' : 'En juego'}</span>`
     : `<span class="text-muted">${timeStr}</span>`;
   return `<div class="list-group-item bg-transparent border-secondary py-2 px-3 ${isDone ? 'opacity-60' : ''}">
     <div class="d-flex justify-content-between align-items-center gap-2">
@@ -389,7 +392,7 @@ let streakData = null;
 function renderStreak(data) {
   const body = document.getElementById('streakBody');
   streakData = data;
-  const { match, my_pick, my_streak, locked, rankings, votes, votes_pct, votes_total } = data;
+  const { match, my_pick, my_streak, locked, kicked_off, score_home, score_away, rankings, votes, votes_pct, votes_total } = data;
 
   if (!match) {
     body.innerHTML = `
@@ -500,10 +503,15 @@ function renderStreak(data) {
     </div>`;
   }
 
+  const scoreHtml = (score_home !== null && score_home !== undefined)
+    ? `<span class="badge bg-dark border border-secondary fs-6 px-3 py-1 mt-1">${score_home} – ${score_away}</span>`
+    : '';
+
   body.innerHTML = `
     <div class="text-center mb-3">
       <div class="fw-bold fs-6">${FLAGS[match.home]||'🏳️'} ${match.home} <span class="text-muted">vs</span> ${FLAGS[match.away]||'🏳️'} ${match.away}</div>
-      <small class="text-muted">¿Quién ganará?</small>
+      ${scoreHtml}
+      <small class="text-muted d-block mt-1">${locked && !match.result ? 'Partido en curso' : locked ? 'Finalizado' : '¿Quién ganará?'}</small>
     </div>
     ${streakBadge}
     ${buttonsHtml}

@@ -1151,11 +1151,23 @@ def api_streak():
     total_votes = sum(votes.values())
     votes_pct = {k: round(v * 100 / total_votes) if total_votes else 0 for k, v in votes.items()}
 
+    kicked_off = False
+    if match_data:
+        kickoff_str = match_data.get('kickoff', '')
+        if kickoff_str:
+            try:
+                kicked_off = datetime.now(timezone.utc) >= datetime.fromisoformat(kickoff_str.replace('Z', '+00:00'))
+            except Exception:
+                pass
+
     return jsonify({
         'match': match_data,
         'my_pick': my_pick,
         'my_streak': my_streak,
-        'locked': bool(match_data and match_data.get('result')),
+        'kicked_off': kicked_off,
+        'locked': bool(match_data and (match_data.get('result') or kicked_off)),
+        'score_home': match_data.get('score_home') if match_data else None,
+        'score_away': match_data.get('score_away') if match_data else None,
         'rankings': get_streak_rankings(),
         'votes': votes,
         'votes_pct': votes_pct,
@@ -1220,6 +1232,16 @@ def api_streak_pick():
 
     if match_data.get('result'):
         return jsonify({'ok': False, 'msg': 'El resultado ya ha sido registrado.'}), 403
+
+    # Lock once kickoff time has passed
+    kickoff_str = match_data.get('kickoff', '')
+    if kickoff_str:
+        try:
+            kickoff_dt = datetime.fromisoformat(kickoff_str.replace('Z', '+00:00'))
+            if datetime.now(timezone.utc) >= kickoff_dt:
+                return jsonify({'ok': False, 'msg': 'El partido ya ha empezado.'}), 403
+        except Exception:
+            pass
 
     pick = (request.get_json() or {}).get('pick', '')
     if pick not in ('home', 'draw', 'away'):
@@ -1379,6 +1401,13 @@ def admin_streak_set_result():
     db.session.commit()
 
     socketio.emit('streak_updated', {'rankings': get_streak_rankings()})
+
+    # Immediately look for the next match so users don't have to wait 5 min
+    try:
+        fetcher.auto_update_streak()
+    except Exception as exc:
+        logger.warning('auto_update_streak after result failed: %s', exc)
+
     return jsonify({'ok': True, 'updated': len(picks)})
 
 
@@ -1631,12 +1660,16 @@ def _auto_streak_loop():
         try:
             with app.app_context():
                 changed = fetcher.auto_update_streak()
-                if changed and 'new_match' in changed:
-                    # New match detected — signal bot to post immediately
-                    AppConfig.set('streak_force_notify', '1')
-                    logger.info('New streak match detected, notifying Discord')
                 if changed and 'result' in changed:
                     socketio.emit('streak_updated', {'rankings': get_streak_rankings()})
+                    # Immediately look for the next match after result is set
+                    next_changed = fetcher.auto_update_streak()
+                    if next_changed and 'new_match' in next_changed:
+                        AppConfig.set('streak_force_notify', '1')
+                        logger.info('Next streak match detected after result, notifying Discord')
+                elif changed and 'new_match' in changed:
+                    AppConfig.set('streak_force_notify', '1')
+                    logger.info('New streak match detected, notifying Discord')
         except Exception as exc:
             logger.error('Auto-streak error: %s', exc)
         socketio.sleep(300)  # every 5 minutes

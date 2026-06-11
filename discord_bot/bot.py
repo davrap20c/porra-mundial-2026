@@ -288,18 +288,26 @@ async def poll_streak():
     if result and result != _last_result:
         _last_result = result
 
+        winner_name = (match['home'] if result == 'home'
+                       else match['away'] if result == 'away'
+                       else 'Empate')
+        score_h = data.get('score_home')
+        score_a = data.get('score_away')
+        score_str = (f'  **{score_h} – {score_a}**'
+                     if score_h is not None else '')
+
         rankings = data.get('rankings', [])
         medals   = ['🥇', '🥈', '🥉']
         top_lines = [
-            f'{medals[i] if i < 3 else f"{i+1}."} **{r["name"]}** — 🔥{r["current"]} (máx {r["max"]})'
+            f'{medals[i] if i < 3 else f"{i+1}."} **{r["name"]}** — 🔥{r["current"]} ({r["points"]} pts)'
             for i, r in enumerate(rankings[:5])
         ] if rankings else ['_Sin rachas todavía._']
 
         embed = discord.Embed(
             title='📊 Resultado — Racha del Día',
             description=(
-                f'**{match["home"]}** vs **{match["away"]}**\n'
-                f'Resultado: **{PICK_LABELS[result]}**'
+                f'**{match["home"]}** vs **{match["away"]}**{score_str}\n'
+                f'Ganador: **{winner_name}** {PICK_LABELS[result].split()[0]}'
             ),
             color=0x28a745,
         )
@@ -311,14 +319,17 @@ async def poll_streak():
 @poll_streak.before_loop
 async def before_poll():
     await bot.wait_until_ready()
-    # Restore last notified key so we don't re-post on restart
-    global _last_match_key
+    global _last_match_key, _last_result
     try:
         data = await _api_get('/api/streak')
         _last_match_key = data.get('last_notified_key') or _last_match_key
-        log.info('Restored last notified match key: %s', _last_match_key)
+        # Restore result so we don't re-send the result message after a restart
+        match = data.get('match')
+        if match and match.get('result'):
+            _last_result = match['result']
+        log.info('Restored state: match=%s result=%s', _last_match_key, _last_result)
     except Exception as exc:
-        log.warning('Could not restore last notified key: %s', exc)
+        log.warning('Could not restore state on startup: %s', exc)
 
 
 @bot.event

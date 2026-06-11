@@ -388,9 +388,15 @@ def fetch_upcoming_matches(days_ahead: int = 14) -> list | None:
     for m in resp.json().get('matches', []):
         home_raw  = ((m.get('homeTeam') or {}).get('name') or '')
         away_raw  = ((m.get('awayTeam') or {}).get('name') or '')
-        ft        = (m.get('score') or {}).get('fullTime') or {}
+        score_obj = m.get('score') or {}
+        ft        = score_obj.get('fullTime') or {}
+        ht        = score_obj.get('halfTime') or {}
         score_h   = ft.get('home')
         score_a   = ft.get('away')
+        # At halftime the API populates halfTime but not fullTime
+        if score_h is None and status == 'PAUSED':
+            score_h = ht.get('home')
+            score_a = ht.get('away')
         status    = m.get('status', '')
         group_raw = m.get('group') or ''
         home      = _map_team(home_raw) if home_raw else ''
@@ -490,6 +496,7 @@ def auto_update_streak() -> dict | None:
         if not is_same:
             new_match = {
                 'date': match_date,
+                'kickoff': target['date'],  # full ISO datetime for vote-locking
                 'home': target['home'],
                 'away': target['away'],
                 'result': None,
@@ -498,6 +505,23 @@ def auto_update_streak() -> dict | None:
             current = new_match
             changed['new_match'] = new_match
             logger.info('Auto streak match set: %s vs %s', target['home'], target['away'])
+
+    # Persist score as soon as the API returns one (halftime or full-time)
+    if current and current.get('score_home') is None:
+        all_with_score = [
+            m for m in matches
+            if m['stage'] == 'GROUP_STAGE'
+            and m['score_home'] is not None
+            and m['date'][:10] == current.get('date')
+            and m['home'] == current.get('home')
+            and m['away'] == current.get('away')
+        ]
+        if all_with_score:
+            api_match = all_with_score[0]
+            current['score_home'] = api_match['score_home']
+            current['score_away'] = api_match['score_away']
+            AppConfig.set('streak_match', json.dumps(current, ensure_ascii=False))
+            logger.info('Streak score persisted: %s-%s', current['score_home'], current['score_away'])
 
     # Auto-set result when finished
     if current and not current.get('result') and finished_recent:
@@ -512,6 +536,8 @@ def auto_update_streak() -> dict | None:
             h, a = match['score_home'], match['score_away']
             result = 'home' if h > a else ('away' if a > h else 'draw')
             current['result'] = result
+            current['score_home'] = h
+            current['score_away'] = a
             AppConfig.set('streak_match', json.dumps(current, ensure_ascii=False))
 
             # Register resolved date so streak points can be computed
