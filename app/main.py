@@ -78,9 +78,11 @@ def get_phase():
     for key in PHASE_CONFIG:
         phases[key] = AppConfig.get(key, 'false') == 'true'
 
-    # Cierre automático al llegar el deadline del torneo
+    # Cierre automático al llegar el deadline, salvo que el admin haya abierto manualmente
     if datetime.now(timezone.utc) >= GROUPS_DEADLINE:
         for key in ('groups_open', 'specials_open'):
+            if AppConfig.get(f'{key}_admin_override', 'false') == 'true':
+                continue  # el admin ha reabierto explícitamente, respetar
             if phases.get(key):
                 AppConfig.set(key, 'false')
                 socketio.emit('phase_updated', phases)
@@ -875,7 +877,11 @@ def admin_toggle_phase():
         flash('Fase inválida.', 'danger')
         return redirect(url_for('admin_panel'))
     current = AppConfig.get(key, 'false')
-    AppConfig.set(key, 'false' if current == 'true' else 'true')
+    new_val = 'false' if current == 'true' else 'true'
+    AppConfig.set(key, new_val)
+    # Si el admin reabre una fase con deadline pasado, marcar override
+    if key in ('groups_open', 'specials_open'):
+        AppConfig.set(f'{key}_admin_override', new_val)
     phase = get_phase()
     socketio.emit('phase_updated', phase)
     flash(f'Fase actualizada.', 'success')
