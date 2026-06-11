@@ -349,8 +349,20 @@ def fetch_upcoming_matches(days_ahead: int = 14) -> list | None:
     if not API_KEY:
         return None
 
+    import json as _json
     now_ts = time.monotonic()
     cached = _upcoming_cache
+
+    # On first call after restart, seed in-memory cache from AppConfig so scores survive restarts
+    if cached['data'] is None:
+        try:
+            saved = AppConfig.get('upcoming_matches_snapshot', '')
+            if saved:
+                cached['data'] = _json.loads(saved)
+                cached['ts'] = 0.0  # force refresh from API, but old_scores will be populated
+        except Exception:
+            pass
+
     ttl = _cache_ttl(cached['data'])
     if cached['data'] is not None and (now_ts - cached['ts']) < ttl:
         return cached['data']
@@ -402,11 +414,14 @@ def fetch_upcoming_matches(days_ahead: int = 14) -> list | None:
         home      = _map_team(home_raw) if home_raw else ''
         away      = _map_team(away_raw) if away_raw else ''
 
-        # Preserve score + status when API reverts to TIMED after showing a score
-        if score_h is None and status == 'TIMED':
+        # Preserve score when API returns null (free tier doesn't provide scores)
+        if score_h is None:
             key = (home, away, m['utcDate'][:10])
             if key in old_scores:
-                score_h, score_a, status = old_scores[key]
+                old = old_scores[key]
+                score_h, score_a = old[0], old[1]
+                if status == 'TIMED':
+                    status = old[2]  # restore status too if API regressed
 
         result.append({
             'date':       m['utcDate'],
@@ -422,6 +437,12 @@ def fetch_upcoming_matches(days_ahead: int = 14) -> list | None:
     if result:
         _upcoming_cache['data'] = result
         _upcoming_cache['ts']   = now_ts
+        # Persist to AppConfig so scores survive container restarts
+        try:
+            import json as _json2
+            AppConfig.set('upcoming_matches_snapshot', _json2.dumps(result, ensure_ascii=False))
+        except Exception:
+            pass
     return result or cached['data']
 
 
