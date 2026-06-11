@@ -316,20 +316,21 @@ _TTL_IDLE    = 3600  # 1 hour when no action
 
 
 def _cache_ttl(data: list | None) -> int:
-    """60s if any match is live/paused or kicks off within 2h, else 1h."""
+    """60s if any match is live/paused, starting soon, or finished within 4h. Else 1h."""
     if not data:
         return _TTL_IDLE
     now = datetime.now(timezone.utc)
     for m in data:
         if m['status'] in ('IN_PLAY', 'PAUSED'):
             return _TTL_ACTIVE
-        if m['status'] in ('TIMED', 'SCHEDULED'):
-            try:
-                dt = datetime.fromisoformat(m['date'].replace('Z', '+00:00'))
-                if abs((dt - now).total_seconds()) < 7200:
-                    return _TTL_ACTIVE
-            except Exception:
-                pass
+        try:
+            dt = datetime.fromisoformat(m['date'].replace('Z', '+00:00'))
+            secs = (now - dt).total_seconds()
+            # Active window: 2h before kickoff until 4h after kickoff
+            if -7200 < secs < 14400:
+                return _TTL_ACTIVE
+        except Exception:
+            pass
     return _TTL_IDLE
 
 
