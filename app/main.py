@@ -1411,6 +1411,42 @@ def admin_streak_set_result():
     return jsonify({'ok': True, 'updated': len(picks)})
 
 
+@app.route('/admin/streak/set-result-past', methods=['POST'])
+@csrf.exempt
+@admin_required
+def admin_streak_set_result_past():
+    """Retroactively resolve a past streak match (e.g. when API gave no score)."""
+    data = request.get_json() or {}
+    date   = data.get('date', '').strip()
+    home   = data.get('home', '').strip()
+    away   = data.get('away', '').strip()
+    result = data.get('result', '')
+
+    if result not in ('home', 'draw', 'away'):
+        return jsonify({'ok': False, 'msg': 'Resultado inválido.'}), 400
+    if not date or not home or not away:
+        return jsonify({'ok': False, 'msg': 'Faltan campos.'}), 400
+
+    resolved_raw = AppConfig.get('streak_resolved_dates', '[]')
+    try:
+        resolved_dates = json.loads(resolved_raw)
+    except Exception:
+        resolved_dates = []
+    if date not in resolved_dates:
+        resolved_dates.append(date)
+        resolved_dates.sort()
+        AppConfig.set('streak_resolved_dates', json.dumps(resolved_dates))
+
+    picks = StreakPick.query.filter_by(match_date=date).all()
+    for p in picks:
+        p.correct = (p.pick == result)
+    db.session.commit()
+
+    socketio.emit('streak_updated', {'rankings': get_streak_rankings()})
+
+    return jsonify({'ok': True, 'updated': len(picks), 'result': result})
+
+
 # ---------------------------------------------------------------------------
 # API – Discord bot
 # ---------------------------------------------------------------------------

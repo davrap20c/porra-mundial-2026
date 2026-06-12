@@ -508,7 +508,14 @@ def auto_update_streak() -> dict | None:
         (m for m in finished_recent if m['date'][:10] not in resolved_dates),
         None
     )
-    target = live or next_scheduled or next_finished
+
+    # If the current match is from a past day and still has no result, don't
+    # auto-advance — the admin must resolve it first (free-tier API has no scores).
+    if current and not current.get('result') and current.get('date', '') < today:
+        target = None
+    else:
+        target = live or next_scheduled or next_finished
+
     if target:
         match_date = target['date'][:10]
         is_same = (current.get('date') == match_date

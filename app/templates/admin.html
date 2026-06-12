@@ -453,6 +453,43 @@
         </div>
       </div>
 
+      <!-- Retroactive result for past matches -->
+      <div class="col-12">
+        <div class="card border-warning">
+          <div class="card-header fw-bold text-warning">⏪ Resolver partido pasado</div>
+          <div class="card-body">
+            <p class="text-muted small mb-3">Usa esto cuando la API no devolvió el marcador y el partido quedó sin resolver (los picks de esa fecha quedarán marcados correctos/incorrectos retroactivamente).</p>
+            <div class="row g-2">
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1">Fecha</label>
+                <input type="date" class="form-control form-control-sm" id="past-date">
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1">Equipo local</label>
+                <input type="text" class="form-control form-control-sm" id="past-home" placeholder="Ej: México" list="streak-teams-list">
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1">Equipo visitante</label>
+                <input type="text" class="form-control form-control-sm" id="past-away" placeholder="Ej: Sudáfrica" list="streak-teams-list">
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1">Resultado</label>
+                <select class="form-select form-select-sm" id="past-result">
+                  <option value="">— Seleccionar —</option>
+                  <option value="home">🏠 Gana local</option>
+                  <option value="draw">🤝 Empate</option>
+                  <option value="away">✈️ Gana visitante</option>
+                </select>
+              </div>
+            </div>
+            <button class="btn btn-warning btn-sm mt-3" onclick="setResultPast()">
+              <i class="bi bi-floppy"></i> Aplicar resultado retroactivo
+            </button>
+            <div id="past-result-status" class="mt-2 small text-center"></div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -752,6 +789,29 @@ async function _setDiscordLink(userId, discordId) {
   const data = await res.json();
   if (data.ok) { showToast(data.msg); setTimeout(() => location.reload(), 700); }
   else alert(data.msg);
+}
+
+async function setResultPast() {
+  const date   = document.getElementById('past-date').value.trim();
+  const home   = document.getElementById('past-home').value.trim();
+  const away   = document.getElementById('past-away').value.trim();
+  const result = document.getElementById('past-result').value;
+  const statusEl = document.getElementById('past-result-status');
+  if (!date || !home || !away || !result) { alert('Completa todos los campos.'); return; }
+  const labels = {home: `gana ${home}`, draw: 'empate', away: `gana ${away}`};
+  if (!confirm(`¿Aplicar resultado "${labels[result]}" al partido ${home} vs ${away} del ${date}?`)) return;
+  const res = await fetch('/admin/streak/set-result-past', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({date, home, away, result}),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    statusEl.innerHTML = `<span class="text-success">✓ ${data.updated} picks actualizados</span>`;
+  } else {
+    statusEl.innerHTML = `<span class="text-danger">${data.msg}</span>`;
+  }
+  setTimeout(() => statusEl.innerHTML = '', 5000);
 }
 
 // Load streak info when the tab is opened
