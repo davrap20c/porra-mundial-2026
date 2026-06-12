@@ -420,12 +420,12 @@ function renderStreak(data) {
 
   // Pick result feedback
   let resultFeedback = '';
-  if (locked && IS_LOGGED_IN && my_pick) {
+  if (locked && IS_LOGGED_IN && match.result && my_pick) {
     const correct = my_pick === match.result;
     resultFeedback = correct
       ? `<div class="alert alert-success py-2 px-3 small mt-2 mb-0">✅ ¡Acertaste! Racha: 🔥${my_streak.current}</div>`
       : `<div class="alert alert-danger py-2 px-3 small mt-2 mb-0">❌ Fallaste. La racha se reinicia.</div>`;
-  } else if (locked && IS_LOGGED_IN && !my_pick) {
+  } else if (locked && IS_LOGGED_IN && match.result && !my_pick) {
     resultFeedback = `<div class="alert alert-secondary py-2 px-3 small mt-2 mb-0">No participaste hoy.</div>`;
   }
 
