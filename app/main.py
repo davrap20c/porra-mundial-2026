@@ -1476,6 +1476,29 @@ def admin_streak_reset_all_results():
     return jsonify({'ok': True, 'reset': count})
 
 
+@app.route('/admin/streak/debug')
+@admin_required
+def admin_streak_debug():
+    """Debug endpoint: shows resolved_dates and all picks grouped by date."""
+    resolved_dates = AppConfig.get('streak_resolved_dates', '[]')
+    streak_match   = AppConfig.get('streak_match', 'null')
+
+    picks_raw = (db.session.query(StreakPick, User.name)
+                 .join(User, StreakPick.user_id == User.id)
+                 .order_by(StreakPick.match_date, User.name)
+                 .all())
+    picks_out = [
+        {'user': name, 'match_date': p.match_date,
+         'pick': p.pick, 'correct': p.correct}
+        for p, name in picks_raw
+    ]
+    return jsonify({
+        'streak_match':    json.loads(streak_match) if streak_match != 'null' else None,
+        'resolved_dates':  json.loads(resolved_dates),
+        'picks':           picks_out,
+    })
+
+
 @app.route('/admin/streak/set-result-past', methods=['POST'])
 @csrf.exempt
 @admin_required
