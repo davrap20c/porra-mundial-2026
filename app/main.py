@@ -617,9 +617,8 @@ def streak_leaderboard():
     if match_data:
         _mk = match_data.get('kickoff') or match_data['date']
         _ds = match_data['date'][:10]
-        for p in StreakPick.query.filter(
-                db.or_(StreakPick.match_date == _mk,
-                       StreakPick.match_date == _ds)).all():
+        vote_filter = (StreakPick.match_date == _mk) if ('T' in _mk) else (StreakPick.match_date == _ds)
+        for p in StreakPick.query.filter(vote_filter).all():
             if p.pick in votes:
                 votes[p.pick] += 1
     total_votes = sum(votes.values())
@@ -1151,9 +1150,8 @@ def api_streak():
     if match_data:
         _mk = match_data.get('kickoff') or match_data['date']
         _ds = match_data['date'][:10]
-        for p in StreakPick.query.filter(
-                db.or_(StreakPick.match_date == _mk,
-                       StreakPick.match_date == _ds)).all():
+        vote_filter = (StreakPick.match_date == _mk) if ('T' in _mk) else (StreakPick.match_date == _ds)
+        for p in StreakPick.query.filter(vote_filter).all():
             if p.pick in votes:
                 votes[p.pick] += 1
 
@@ -1211,9 +1209,8 @@ def api_streak_votes():
 
     _mk = match_data.get('kickoff') or match_data['date']
     _ds = match_data['date'][:10]
-    picks = StreakPick.query.filter(
-        db.or_(StreakPick.match_date == _mk,
-               StreakPick.match_date == _ds)).all()
+    vote_filter = (StreakPick.match_date == _mk) if ('T' in _mk) else (StreakPick.match_date == _ds)
+    picks = StreakPick.query.filter(vote_filter).all()
     counts = {'home': 0, 'draw': 0, 'away': 0}
     for p in picks:
         if p.pick in counts:
@@ -1280,6 +1277,7 @@ def api_streak_pick():
                StreakPick.match_date == date_str)).first()
     if existing:
         existing.pick = pick
+        existing.match_date = match_key  # migrate old date-only format to kickoff
     else:
         db.session.add(StreakPick(
             user_id=user.id, match_date=match_key, pick=pick))
@@ -1523,8 +1521,9 @@ def admin_streak_set_result_past():
     date    = data.get('date', '').strip()
     home    = data.get('home', '').strip()
     away    = data.get('away', '').strip()
-    result  = data.get('result', '')
-    kickoff = data.get('kickoff', '').strip()  # optional: exact match_date key
+    result         = data.get('result', '')
+    kickoff        = data.get('kickoff', '').strip()       # optional: exact match_date key
+    include_legacy = data.get('include_legacy', False)     # include old date-only picks
 
     if result not in ('home', 'draw', 'away'):
         return jsonify({'ok': False, 'msg': 'Resultado inválido.'}), 400
@@ -1541,12 +1540,16 @@ def admin_streak_set_result_past():
         resolved_dates.sort()
         AppConfig.set('streak_resolved_dates', json.dumps(resolved_dates))
 
-    # When kickoff is provided, use it as the exact match key so multiple matches
-    # on the same day don't interfere with each other.
+    # When kickoff is provided use it as the exact match key to avoid mixing
+    # multiple same-day matches. include_legacy=True also claims old date-only
+    # picks (format "YYYY-MM-DD") — use this only for the FIRST match of the day.
     if kickoff:
-        picks = StreakPick.query.filter(
-            db.or_(StreakPick.match_date == kickoff,
-                   StreakPick.match_date == date)).all()
+        if include_legacy:
+            picks = StreakPick.query.filter(
+                db.or_(StreakPick.match_date == kickoff,
+                       StreakPick.match_date == date)).all()
+        else:
+            picks = StreakPick.query.filter(StreakPick.match_date == kickoff).all()
     else:
         picks = StreakPick.query.filter(StreakPick.match_date.like(f'{date}%')).all()
     for p in picks:
@@ -1654,6 +1657,7 @@ def api_discord_pick():
                StreakPick.match_date == date_str)).first()
     if existing:
         existing.pick = pick
+        existing.match_date = match_key  # migrate old date-only format to kickoff
     else:
         db.session.add(StreakPick(
             user_id=link.user_id, match_date=match_key, pick=pick))

@@ -503,7 +503,13 @@
                 <input type="text" class="form-control form-control-sm" id="past-kickoff" placeholder="2026-06-12T06:00:00Z">
               </div>
             </div>
-            <button class="btn btn-warning btn-sm mt-3" onclick="setResultPast()">
+            <div class="form-check mt-3">
+              <input class="form-check-input" type="checkbox" id="past-include-legacy">
+              <label class="form-check-label small text-warning" for="past-include-legacy">
+                Incluir picks sin kickoff de este día <span class="text-muted">(marcar solo para el <strong>primer partido</strong> del día con picks en formato antiguo)</span>
+              </label>
+            </div>
+            <button class="btn btn-warning btn-sm mt-2" onclick="setResultPast()">
               <i class="bi bi-floppy"></i> Aplicar resultado retroactivo
             </button>
             <div id="past-result-status" class="mt-2 small text-center"></div>
@@ -853,11 +859,12 @@ async function resetStreakResult() {
 }
 
 async function setResultPast() {
-  const date    = document.getElementById('past-date').value.trim();
-  const home    = document.getElementById('past-home').value.trim();
-  const away    = document.getElementById('past-away').value.trim();
-  const result  = document.getElementById('past-result').value;
-  const kickoff = document.getElementById('past-kickoff').value.trim();
+  const date           = document.getElementById('past-date').value.trim();
+  const home           = document.getElementById('past-home').value.trim();
+  const away           = document.getElementById('past-away').value.trim();
+  const result         = document.getElementById('past-result').value;
+  const kickoff        = document.getElementById('past-kickoff').value.trim();
+  const include_legacy = document.getElementById('past-include-legacy').checked;
   const statusEl = document.getElementById('past-result-status');
   if (!date || !home || !away || !result) { alert('Completa todos los campos.'); return; }
   const labels = {home: `gana ${home}`, draw: 'empate', away: `gana ${away}`};
@@ -865,7 +872,7 @@ async function setResultPast() {
   const res = await fetch('/admin/streak/set-result-past', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({date, home, away, result, kickoff}),
+    body: JSON.stringify({date, home, away, result, kickoff, include_legacy}),
   });
   const data = await res.json();
   if (data.ok) {
