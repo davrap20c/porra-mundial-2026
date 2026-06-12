@@ -95,7 +95,7 @@
             {% else %}{{ loop.index }}{% endif %}
           </td>
           <td>
-            <a href="{{ url_for('mis_predicciones', user_id=r.user_id) }}" class="text-decoration-none text-white fw-semibold">
+            <a href="{{ url_for('my_predictions', user_id=r.user_id) }}" class="text-decoration-none text-white fw-semibold">
               {{ r.name }}
             </a>
             {% if user and r.user_id == user.id %}
