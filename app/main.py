@@ -615,8 +615,11 @@ def streak_leaderboard():
             pass
     votes = {'home': 0, 'draw': 0, 'away': 0}
     if match_data:
-        _dp = match_data['date'][:10]
-        for p in StreakPick.query.filter(StreakPick.match_date.like(f'{_dp}%')).all():
+        _mk = match_data.get('kickoff') or match_data['date']
+        _ds = match_data['date'][:10]
+        for p in StreakPick.query.filter(
+                db.or_(StreakPick.match_date == _mk,
+                       StreakPick.match_date == _ds)).all():
             if p.pick in votes:
                 votes[p.pick] += 1
     total_votes = sum(votes.values())
@@ -1146,16 +1149,21 @@ def api_streak():
 
     votes = {'home': 0, 'draw': 0, 'away': 0}
     if match_data:
-        _date_prefix = match_data['date'][:10]
-        for p in StreakPick.query.filter(StreakPick.match_date.like(f'{_date_prefix}%')).all():
+        _mk = match_data.get('kickoff') or match_data['date']
+        _ds = match_data['date'][:10]
+        for p in StreakPick.query.filter(
+                db.or_(StreakPick.match_date == _mk,
+                       StreakPick.match_date == _ds)).all():
             if p.pick in votes:
                 votes[p.pick] += 1
 
     if user and match_data:
-        _date_prefix = match_data['date'][:10]
+        _mk = match_data.get('kickoff') or match_data['date']
+        _ds = match_data['date'][:10]
         sp = StreakPick.query.filter(
             StreakPick.user_id == user.id,
-            StreakPick.match_date.like(f'{_date_prefix}%')).first()
+            db.or_(StreakPick.match_date == _mk,
+                   StreakPick.match_date == _ds)).first()
         if sp:
             my_pick = sp.pick
         cur, mx, pts = get_streak_stats(user.id)
@@ -1201,8 +1209,11 @@ def api_streak_votes():
     except Exception:
         return jsonify({'ok': False}), 500
 
-    _dp = match_data['date'][:10]
-    picks = StreakPick.query.filter(StreakPick.match_date.like(f'{_dp}%')).all()
+    _mk = match_data.get('kickoff') or match_data['date']
+    _ds = match_data['date'][:10]
+    picks = StreakPick.query.filter(
+        db.or_(StreakPick.match_date == _mk,
+               StreakPick.match_date == _ds)).all()
     counts = {'home': 0, 'draw': 0, 'away': 0}
     for p in picks:
         if p.pick in counts:
@@ -1261,13 +1272,17 @@ def api_streak_pick():
     if pick not in ('home', 'draw', 'away'):
         return jsonify({'ok': False, 'msg': 'Opción inválida.'}), 400
 
-    existing = StreakPick.query.filter_by(
-        user_id=user.id, match_date=match_data['date']).first()
+    match_key = match_data.get('kickoff') or match_data['date']
+    date_str  = match_data['date'][:10]
+    existing = StreakPick.query.filter(
+        StreakPick.user_id == user.id,
+        db.or_(StreakPick.match_date == match_key,
+               StreakPick.match_date == date_str)).first()
     if existing:
         existing.pick = pick
     else:
         db.session.add(StreakPick(
-            user_id=user.id, match_date=match_data['date'], pick=pick))
+            user_id=user.id, match_date=match_key, pick=pick))
     db.session.commit()
     return jsonify({'ok': True})
 
@@ -1624,13 +1639,17 @@ def api_discord_pick():
         except Exception:
             pass
 
-    existing = StreakPick.query.filter_by(
-        user_id=link.user_id, match_date=match_data['date']).first()
+    match_key = match_data.get('kickoff') or match_data['date']
+    date_str  = match_data['date'][:10]
+    existing = StreakPick.query.filter(
+        StreakPick.user_id == link.user_id,
+        db.or_(StreakPick.match_date == match_key,
+               StreakPick.match_date == date_str)).first()
     if existing:
         existing.pick = pick
     else:
         db.session.add(StreakPick(
-            user_id=link.user_id, match_date=match_data['date'], pick=pick))
+            user_id=link.user_id, match_date=match_key, pick=pick))
     db.session.commit()
     return jsonify({'ok': True})
 
