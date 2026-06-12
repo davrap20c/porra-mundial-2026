@@ -1400,7 +1400,8 @@ def admin_streak_set_result():
         resolved_dates.sort()
         AppConfig.set('streak_resolved_dates', json.dumps(resolved_dates))
 
-    picks = StreakPick.query.filter_by(match_date=match_data['date']).all()
+    _dp = match_data['date'][:10]
+    picks = StreakPick.query.filter(StreakPick.match_date.like(f'{_dp}%')).all()
     for p in picks:
         p.correct = (p.pick == result)
     db.session.commit()
@@ -1414,6 +1415,43 @@ def admin_streak_set_result():
         logger.warning('auto_update_streak after result failed: %s', exc)
 
     return jsonify({'ok': True, 'updated': len(picks)})
+
+
+@app.route('/admin/streak/reset-result', methods=['POST'])
+@csrf.exempt
+@admin_required
+def admin_streak_reset_result():
+    """Clear the result of the current streak match so it can be corrected."""
+    raw = AppConfig.get('streak_match', '')
+    if not raw:
+        return jsonify({'ok': False, 'msg': 'No hay partido configurado.'}), 400
+    try:
+        match_data = json.loads(raw)
+    except Exception:
+        return jsonify({'ok': False, 'msg': 'Error de configuración.'}), 500
+
+    date = match_data.get('date', '')[:10]
+
+    match_data['result'] = None
+    AppConfig.set('streak_match', json.dumps(match_data, ensure_ascii=False))
+
+    # Remove from resolved dates
+    resolved_raw = AppConfig.get('streak_resolved_dates', '[]')
+    try:
+        resolved_dates = json.loads(resolved_raw)
+    except Exception:
+        resolved_dates = []
+    resolved_dates = [d for d in resolved_dates if d[:10] != date]
+    AppConfig.set('streak_resolved_dates', json.dumps(resolved_dates))
+
+    # Reset correct field on all picks for this date
+    picks = StreakPick.query.filter(StreakPick.match_date.like(f'{date}%')).all()
+    for p in picks:
+        p.correct = None
+    db.session.commit()
+
+    socketio.emit('streak_updated', {'rankings': get_streak_rankings()})
+    return jsonify({'ok': True, 'reset': len(picks)})
 
 
 @app.route('/admin/streak/set-result-past', methods=['POST'])
@@ -1531,6 +1569,15 @@ def api_discord_pick():
 
     if match_data.get('result'):
         return jsonify({'ok': False, 'msg': 'El partido ya ha terminado.'}), 403
+
+    kickoff_str = match_data.get('kickoff', '')
+    if kickoff_str:
+        try:
+            kickoff_dt = datetime.fromisoformat(kickoff_str.replace('Z', '+00:00'))
+            if datetime.now(timezone.utc) >= kickoff_dt:
+                return jsonify({'ok': False, 'msg': 'El partido ya ha empezado.'}), 403
+        except Exception:
+            pass
 
     existing = StreakPick.query.filter_by(
         user_id=link.user_id, match_date=match_data['date']).first()

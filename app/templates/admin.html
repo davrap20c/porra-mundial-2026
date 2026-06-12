@@ -447,6 +447,9 @@
               <button class="btn btn-outline-primary btn-sm" onclick="setStreakResult('away')" id="btn-streak-away" disabled>
                 <i class="bi bi-airplane-fill"></i> Gana el visitante
               </button>
+              <button class="btn btn-outline-danger btn-sm d-none" onclick="resetStreakResult()" id="btn-streak-reset">
+                <i class="bi bi-arrow-counterclockwise"></i> Anular resultado
+              </button>
             </div>
             <div id="streak-result-status" class="mt-2 small text-center"></div>
           </div>
@@ -672,8 +675,11 @@ async function loadStreakAdmin() {
     document.getElementById('btn-streak-home').textContent = `🏠 Gana ${m.home}`;
     document.getElementById('btn-streak-away').textContent = `✈️ Gana ${m.away}`;
     ['btn-streak-home', 'btn-streak-draw', 'btn-streak-away'].forEach(id => {
-      document.getElementById(id).disabled = !!m.result;
+      document.getElementById(id).disabled = false;
     });
+    const resetBtn = document.getElementById('btn-streak-reset');
+    if (m.result) { resetBtn.classList.remove('d-none'); }
+    else { resetBtn.classList.add('d-none'); }
 
     // Pre-fill the set-match form
     document.getElementById('streak-date').value  = m.date;
@@ -789,6 +795,22 @@ async function _setDiscordLink(userId, discordId) {
   const data = await res.json();
   if (data.ok) { showToast(data.msg); setTimeout(() => location.reload(), 700); }
   else alert(data.msg);
+}
+
+async function resetStreakResult() {
+  if (!confirm('¿Anular el resultado del partido actual? Los picks quedarán pendientes y podrás volver a poner el resultado correcto.')) return;
+  const statusEl = document.getElementById('streak-result-status');
+  const res = await fetch('/admin/streak/reset-result', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+  });
+  const data = await res.json();
+  if (data.ok) {
+    statusEl.innerHTML = `<span class="text-warning">✓ Resultado anulado (${data.reset} picks reseteados)</span>`;
+    loadStreakAdmin();
+  } else {
+    statusEl.innerHTML = `<span class="text-danger">${data.msg}</span>`;
+  }
+  setTimeout(() => statusEl.innerHTML = '', 5000);
 }
 
 async function setResultPast() {
