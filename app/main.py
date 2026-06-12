@@ -1066,7 +1066,11 @@ def _streak_stats_for_users():
         uid = pick.user_id
         if uid not in by_user:
             by_user[uid] = {'name': name, 'pick_map': {}}
-        by_user[uid]['pick_map'][pick.match_date[:10]] = pick.correct
+        d10 = pick.match_date[:10]
+        # If duplicate picks exist for the same date, correct=True wins
+        existing = by_user[uid]['pick_map'].get(d10)
+        if existing is None or pick.correct is True:
+            by_user[uid]['pick_map'][d10] = pick.correct
 
     # Also include users who have any pick (even pending) so their name is known
     all_picks_names = (db.session.query(StreakPick.user_id, User.name)
@@ -1079,7 +1083,8 @@ def _streak_stats_for_users():
 
     result = {}
     for user_id, data in by_user.items():
-        date_results = [(d, data['pick_map'].get(d, None)) for d in resolved_dates]
+        # Normalize resolved_dates to YYYY-MM-DD so they match pick_map keys
+        date_results = [(d[:10], data['pick_map'].get(d[:10], None)) for d in resolved_dates]
         current, max_s, points = _calc_streak_stats(date_results)
         result[user_id] = {
             'name': data['name'],
@@ -1095,12 +1100,16 @@ def get_streak_stats(user_id):
     resolved_dates = _get_resolved_dates()
     if not resolved_dates:
         return 0, 0, 0
-    picks = {p.match_date[:10]: p.correct
-             for p in StreakPick.query
-             .filter_by(user_id=user_id)
-             .filter(StreakPick.correct.isnot(None))
-             .all()}
-    date_results = [(d, picks.get(d, None)) for d in resolved_dates]
+    raw_picks = (StreakPick.query
+                 .filter_by(user_id=user_id)
+                 .filter(StreakPick.correct.isnot(None))
+                 .all())
+    picks: dict = {}
+    for p in raw_picks:
+        d10 = p.match_date[:10]
+        if picks.get(d10) is None or p.correct is True:
+            picks[d10] = p.correct
+    date_results = [(d[:10], picks.get(d[:10], None)) for d in resolved_dates]
     return _calc_streak_stats(date_results)
 
 
@@ -1452,6 +1461,19 @@ def admin_streak_reset_result():
 
     socketio.emit('streak_updated', {'rankings': get_streak_rankings()})
     return jsonify({'ok': True, 'reset': len(picks)})
+
+
+@app.route('/admin/streak/reset-all-results', methods=['POST'])
+@csrf.exempt
+@admin_required
+def admin_streak_reset_all_results():
+    """Reset ALL streak results: clears correct on every pick and empties resolved_dates."""
+    count = StreakPick.query.filter(StreakPick.correct.isnot(None)).count()
+    StreakPick.query.update({StreakPick.correct: None})
+    db.session.commit()
+    AppConfig.set('streak_resolved_dates', '[]')
+    socketio.emit('streak_updated', {'rankings': []})
+    return jsonify({'ok': True, 'reset': count})
 
 
 @app.route('/admin/streak/set-result-past', methods=['POST'])

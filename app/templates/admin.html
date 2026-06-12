@@ -456,6 +456,20 @@
         </div>
       </div>
 
+      <!-- Reset all streak results -->
+      <div class="col-12">
+        <div class="card border-danger">
+          <div class="card-header fw-bold text-danger">🗑️ Resetear todos los resultados de racha</div>
+          <div class="card-body">
+            <p class="text-muted small mb-3">Borra los resultados de <strong>todos</strong> los partidos resueltos (pone <code>correct = NULL</code> en todos los picks y vacía la lista de fechas resueltas). Los votos en sí se conservan. Úsalo para volver a meter los resultados desde cero.</p>
+            <button class="btn btn-danger btn-sm" onclick="resetAllStreakResults()">
+              <i class="bi bi-trash3"></i> Resetear todo
+            </button>
+            <div id="reset-all-streak-status" class="mt-2 small text-center"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Retroactive result for past matches -->
       <div class="col-12">
         <div class="card border-warning">
@@ -795,6 +809,22 @@ async function _setDiscordLink(userId, discordId) {
   const data = await res.json();
   if (data.ok) { showToast(data.msg); setTimeout(() => location.reload(), 700); }
   else alert(data.msg);
+}
+
+async function resetAllStreakResults() {
+  if (!confirm('⚠️ ¿Resetear TODOS los resultados de racha? Se borrará el historial de puntos de todos los jugadores. Los votos se conservan.')) return;
+  const statusEl = document.getElementById('reset-all-streak-status');
+  const res = await fetch('/admin/streak/reset-all-results', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+  });
+  const data = await res.json();
+  if (data.ok) {
+    statusEl.innerHTML = `<span class="text-success">✓ ${data.reset} picks reseteados</span>`;
+    loadStreakAdmin();
+  } else {
+    statusEl.innerHTML = `<span class="text-danger">${data.msg}</span>`;
+  }
+  setTimeout(() => statusEl.innerHTML = '', 5000);
 }
 
 async function resetStreakResult() {
