@@ -402,6 +402,11 @@
               <input type="text" class="form-control form-control-sm" id="streak-away"
                      placeholder="Ej: Argentina" list="streak-teams-list">
             </div>
+            <div class="mb-2">
+              <label class="form-label small text-muted mb-1">Kickoff ISO <span class="text-warning small">(importante si hay 2 partidos el mismo día)</span></label>
+              <input type="text" class="form-control form-control-sm" id="streak-kickoff"
+                     placeholder="Ej: 2026-06-12T18:00:00Z">
+            </div>
             <datalist id="streak-teams-list">
               {% for team in all_teams %}
               <option value="{{ team }}">
@@ -719,9 +724,10 @@ async function loadStreakAdmin() {
     else { resetBtn.classList.add('d-none'); }
 
     // Pre-fill the set-match form
-    document.getElementById('streak-date').value  = m.date;
-    document.getElementById('streak-home').value  = m.home;
-    document.getElementById('streak-away').value  = m.away;
+    document.getElementById('streak-date').value    = m.date;
+    document.getElementById('streak-home').value    = m.home;
+    document.getElementById('streak-away').value    = m.away;
+    document.getElementById('streak-kickoff').value = m.kickoff || '';
     // Pre-fill retroactive form too
     document.getElementById('past-date').value    = m.date;
     document.getElementById('past-home').value    = m.home;
@@ -780,15 +786,16 @@ async function notifyDiscordNow() {
 }
 
 async function setStreakMatch() {
-  const date = document.getElementById('streak-date').value.trim();
-  const home = document.getElementById('streak-home').value.trim();
-  const away = document.getElementById('streak-away').value.trim();
+  const date    = document.getElementById('streak-date').value.trim();
+  const home    = document.getElementById('streak-home').value.trim();
+  const away    = document.getElementById('streak-away').value.trim();
+  const kickoff = document.getElementById('streak-kickoff').value.trim();
   const statusEl = document.getElementById('streak-match-status');
   if (!date || !home || !away) { alert('Completa todos los campos.'); return; }
   const res = await fetch('/admin/streak/set-match', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({date, home, away}),
+    body: JSON.stringify({date, home, away, kickoff}),
   });
   const data = await res.json();
   statusEl.innerHTML = data.ok

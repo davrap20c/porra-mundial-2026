@@ -1318,14 +1318,16 @@ def admin_streak_next_from_api():
 @admin_required
 def admin_streak_set_match():
     data = request.get_json() or {}
-    home = data.get('home', '').strip()
-    away = data.get('away', '').strip()
-    date = data.get('date', '').strip()
+    home    = data.get('home', '').strip()
+    away    = data.get('away', '').strip()
+    date    = data.get('date', '').strip()
+    kickoff = data.get('kickoff', '').strip()
     if not home or not away or not date:
         return jsonify({'ok': False, 'msg': 'Faltan datos.'}), 400
-    AppConfig.set('streak_match', json.dumps(
-        {'date': date, 'home': home, 'away': away, 'result': None},
-        ensure_ascii=False))
+    match_obj = {'date': date, 'home': home, 'away': away, 'result': None}
+    if kickoff:
+        match_obj['kickoff'] = kickoff
+    AppConfig.set('streak_match', json.dumps(match_obj, ensure_ascii=False))
     return jsonify({'ok': True})
 
 
