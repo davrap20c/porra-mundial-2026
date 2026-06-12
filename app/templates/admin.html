@@ -458,6 +458,19 @@
 
       <!-- Reset all streak results -->
       <div class="col-12">
+        <div class="card border-warning">
+          <div class="card-header fw-bold text-warning">🗳️ Resetear votos de hoy</div>
+          <div class="card-body">
+            <p class="text-muted small mb-3">Borra todos los picks del partido activo (del día de hoy). La gente podrá volver a votar. No afecta a resultados de días anteriores.</p>
+            <button class="btn btn-warning btn-sm" onclick="resetTodayPicks()">
+              <i class="bi bi-arrow-counterclockwise"></i> Borrar votos de hoy
+            </button>
+            <div id="reset-today-status" class="mt-2 small text-center"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12">
         <div class="card border-danger">
           <div class="card-header fw-bold text-danger">🗑️ Resetear todos los resultados de racha</div>
           <div class="card-body">
@@ -824,6 +837,19 @@ async function _setDiscordLink(userId, discordId) {
   const data = await res.json();
   if (data.ok) { showToast(data.msg); setTimeout(() => location.reload(), 700); }
   else alert(data.msg);
+}
+
+async function resetTodayPicks() {
+  if (!confirm('¿Borrar todos los votos del partido de hoy? La gente podrá votar de nuevo.')) return;
+  const statusEl = document.getElementById('reset-today-status');
+  const res = await fetch('/admin/streak/reset-today-picks', {method: 'POST', headers: {'Content-Type': 'application/json'}});
+  const data = await res.json();
+  if (data.ok) {
+    statusEl.innerHTML = `<span class="text-success">✓ ${data.deleted} votos borrados</span>`;
+  } else {
+    statusEl.innerHTML = `<span class="text-danger">${data.msg}</span>`;
+  }
+  setTimeout(() => statusEl.innerHTML = '', 4000);
 }
 
 async function resetAllStreakResults() {

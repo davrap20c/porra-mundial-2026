@@ -1476,6 +1476,31 @@ def admin_streak_reset_result():
     return jsonify({'ok': True, 'reset': len(picks)})
 
 
+@app.route('/admin/streak/reset-today-picks', methods=['POST'])
+@csrf.exempt
+@admin_required
+def admin_streak_reset_today_picks():
+    """Delete all picks for today's active match so users can re-vote."""
+    raw = AppConfig.get('streak_match', '')
+    if not raw:
+        return jsonify({'ok': False, 'msg': 'No hay partido configurado.'}), 400
+    try:
+        match_data = json.loads(raw)
+    except Exception:
+        return jsonify({'ok': False, 'msg': 'Error de configuración.'}), 500
+
+    match_key = match_data.get('kickoff') or match_data['date']
+    date_str  = match_data['date'][:10]
+    picks = StreakPick.query.filter(
+        db.or_(StreakPick.match_date == match_key,
+               StreakPick.match_date == date_str)).all()
+    count = len(picks)
+    for p in picks:
+        db.session.delete(p)
+    db.session.commit()
+    return jsonify({'ok': True, 'deleted': count})
+
+
 @app.route('/admin/streak/reset-all-results', methods=['POST'])
 @csrf.exempt
 @admin_required
