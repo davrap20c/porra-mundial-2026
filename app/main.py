@@ -615,7 +615,8 @@ def streak_leaderboard():
             pass
     votes = {'home': 0, 'draw': 0, 'away': 0}
     if match_data:
-        for p in StreakPick.query.filter_by(match_date=match_data['date']).all():
+        _dp = match_data['date'][:10]
+        for p in StreakPick.query.filter(StreakPick.match_date.like(f'{_dp}%')).all():
             if p.pick in votes:
                 votes[p.pick] += 1
     total_votes = sum(votes.values())
