@@ -1304,10 +1304,11 @@ def admin_streak_next_from_api():
         return jsonify({'ok': False, 'msg': 'No hay próximos partidos de grupos en la API.'}), 404
     nxt = candidates[0]
     match_data = {
-        'date': nxt['date'][:10],
-        'home': nxt['home'],
-        'away': nxt['away'],
-        'result': None,
+        'date':    nxt['date'][:10],
+        'kickoff': nxt['date'],          # full ISO from API e.g. "2026-06-12T18:00:00Z"
+        'home':    nxt['home'],
+        'away':    nxt['away'],
+        'result':  None,
     }
     AppConfig.set('streak_match', json.dumps(match_data, ensure_ascii=False))
     return jsonify({'ok': True, 'match': match_data})
