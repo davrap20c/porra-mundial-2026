@@ -1065,7 +1065,7 @@ def _streak_stats_for_users():
         uid = pick.user_id
         if uid not in by_user:
             by_user[uid] = {'name': name, 'pick_map': {}}
-        by_user[uid]['pick_map'][pick.match_date] = pick.correct
+        by_user[uid]['pick_map'][pick.match_date[:10]] = pick.correct
 
     # Also include users who have any pick (even pending) so their name is known
     all_picks_names = (db.session.query(StreakPick.user_id, User.name)
@@ -1094,7 +1094,7 @@ def get_streak_stats(user_id):
     resolved_dates = _get_resolved_dates()
     if not resolved_dates:
         return 0, 0, 0
-    picks = {p.match_date: p.correct
+    picks = {p.match_date[:10]: p.correct
              for p in StreakPick.query
              .filter_by(user_id=user_id)
              .filter(StreakPick.correct.isnot(None))
@@ -1136,13 +1136,16 @@ def api_streak():
 
     votes = {'home': 0, 'draw': 0, 'away': 0}
     if match_data:
-        for p in StreakPick.query.filter_by(match_date=match_data['date']).all():
+        _date_prefix = match_data['date'][:10]
+        for p in StreakPick.query.filter(StreakPick.match_date.like(f'{_date_prefix}%')).all():
             if p.pick in votes:
                 votes[p.pick] += 1
 
     if user and match_data:
-        sp = StreakPick.query.filter_by(
-            user_id=user.id, match_date=match_data['date']).first()
+        _date_prefix = match_data['date'][:10]
+        sp = StreakPick.query.filter(
+            StreakPick.user_id == user.id,
+            StreakPick.match_date.like(f'{_date_prefix}%')).first()
         if sp:
             my_pick = sp.pick
         cur, mx, pts = get_streak_stats(user.id)
@@ -1188,7 +1191,8 @@ def api_streak_votes():
     except Exception:
         return jsonify({'ok': False}), 500
 
-    picks = StreakPick.query.filter_by(match_date=match_data['date']).all()
+    _dp = match_data['date'][:10]
+    picks = StreakPick.query.filter(StreakPick.match_date.like(f'{_dp}%')).all()
     counts = {'home': 0, 'draw': 0, 'away': 0}
     for p in picks:
         if p.pick in counts:
@@ -1437,10 +1441,25 @@ def admin_streak_set_result_past():
         resolved_dates.sort()
         AppConfig.set('streak_resolved_dates', json.dumps(resolved_dates))
 
-    picks = StreakPick.query.filter_by(match_date=date).all()
+    # Match picks by date prefix to handle both "YYYY-MM-DD" and full ISO formats
+    picks = StreakPick.query.filter(StreakPick.match_date.like(f'{date}%')).all()
     for p in picks:
         p.correct = (p.pick == result)
     db.session.commit()
+
+    # Also set result on streak_match AppConfig if this is the current match,
+    # so voting gets locked and the auto-advance loop can progress.
+    raw = AppConfig.get('streak_match', '')
+    if raw:
+        try:
+            current = json.loads(raw)
+            if (current.get('date', '')[:10] == date
+                    and current.get('home') == home
+                    and current.get('away') == away):
+                current['result'] = result
+                AppConfig.set('streak_match', json.dumps(current, ensure_ascii=False))
+        except Exception:
+            pass
 
     socketio.emit('streak_updated', {'rankings': get_streak_rankings()})
 
