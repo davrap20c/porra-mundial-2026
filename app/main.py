@@ -1520,10 +1520,11 @@ def admin_streak_debug():
 def admin_streak_set_result_past():
     """Retroactively resolve a past streak match (e.g. when API gave no score)."""
     data = request.get_json() or {}
-    date   = data.get('date', '').strip()
-    home   = data.get('home', '').strip()
-    away   = data.get('away', '').strip()
-    result = data.get('result', '')
+    date    = data.get('date', '').strip()
+    home    = data.get('home', '').strip()
+    away    = data.get('away', '').strip()
+    result  = data.get('result', '')
+    kickoff = data.get('kickoff', '').strip()  # optional: exact match_date key
 
     if result not in ('home', 'draw', 'away'):
         return jsonify({'ok': False, 'msg': 'Resultado inválido.'}), 400
@@ -1540,8 +1541,14 @@ def admin_streak_set_result_past():
         resolved_dates.sort()
         AppConfig.set('streak_resolved_dates', json.dumps(resolved_dates))
 
-    # Match picks by date prefix to handle both "YYYY-MM-DD" and full ISO formats
-    picks = StreakPick.query.filter(StreakPick.match_date.like(f'{date}%')).all()
+    # When kickoff is provided, use it as the exact match key so multiple matches
+    # on the same day don't interfere with each other.
+    if kickoff:
+        picks = StreakPick.query.filter(
+            db.or_(StreakPick.match_date == kickoff,
+                   StreakPick.match_date == date)).all()
+    else:
+        picks = StreakPick.query.filter(StreakPick.match_date.like(f'{date}%')).all()
     for p in picks:
         p.correct = (p.pick == result)
     db.session.commit()

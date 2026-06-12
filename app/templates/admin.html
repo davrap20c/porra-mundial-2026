@@ -477,7 +477,7 @@
           <div class="card-body">
             <p class="text-muted small mb-3">Usa esto cuando la API no devolvió el marcador y el partido quedó sin resolver (los picks de esa fecha quedarán marcados correctos/incorrectos retroactivamente).</p>
             <div class="row g-2">
-              <div class="col-sm-3">
+              <div class="col-sm-2">
                 <label class="form-label small text-muted mb-1">Fecha</label>
                 <input type="date" class="form-control form-control-sm" id="past-date">
               </div>
@@ -489,7 +489,7 @@
                 <label class="form-label small text-muted mb-1">Equipo visitante</label>
                 <input type="text" class="form-control form-control-sm" id="past-away" placeholder="Ej: Sudáfrica" list="streak-teams-list">
               </div>
-              <div class="col-sm-3">
+              <div class="col-sm-2">
                 <label class="form-label small text-muted mb-1">Resultado</label>
                 <select class="form-select form-select-sm" id="past-result">
                   <option value="">— Seleccionar —</option>
@@ -497,6 +497,10 @@
                   <option value="draw">🤝 Empate</option>
                   <option value="away">✈️ Gana visitante</option>
                 </select>
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1">Kickoff ISO <span class="text-warning">(importante si hay 2 partidos el mismo día)</span></label>
+                <input type="text" class="form-control form-control-sm" id="past-kickoff" placeholder="2026-06-12T06:00:00Z">
               </div>
             </div>
             <button class="btn btn-warning btn-sm mt-3" onclick="setResultPast()">
@@ -699,6 +703,11 @@ async function loadStreakAdmin() {
     document.getElementById('streak-date').value  = m.date;
     document.getElementById('streak-home').value  = m.home;
     document.getElementById('streak-away').value  = m.away;
+    // Pre-fill retroactive form too
+    document.getElementById('past-date').value    = m.date;
+    document.getElementById('past-home').value    = m.home;
+    document.getElementById('past-away').value    = m.away;
+    if (m.kickoff) document.getElementById('past-kickoff').value = m.kickoff;
   } catch (e) {
     document.getElementById('streak-current-info').textContent = 'Error al cargar la racha.';
   }
@@ -844,10 +853,11 @@ async function resetStreakResult() {
 }
 
 async function setResultPast() {
-  const date   = document.getElementById('past-date').value.trim();
-  const home   = document.getElementById('past-home').value.trim();
-  const away   = document.getElementById('past-away').value.trim();
-  const result = document.getElementById('past-result').value;
+  const date    = document.getElementById('past-date').value.trim();
+  const home    = document.getElementById('past-home').value.trim();
+  const away    = document.getElementById('past-away').value.trim();
+  const result  = document.getElementById('past-result').value;
+  const kickoff = document.getElementById('past-kickoff').value.trim();
   const statusEl = document.getElementById('past-result-status');
   if (!date || !home || !away || !result) { alert('Completa todos los campos.'); return; }
   const labels = {home: `gana ${home}`, draw: 'empate', away: `gana ${away}`};
@@ -855,7 +865,7 @@ async function setResultPast() {
   const res = await fetch('/admin/streak/set-result-past', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({date, home, away, result}),
+    body: JSON.stringify({date, home, away, result, kickoff}),
   });
   const data = await res.json();
   if (data.ok) {
